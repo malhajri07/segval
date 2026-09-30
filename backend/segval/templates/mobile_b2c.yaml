@@ -1,0 +1,177 @@
+# Ready-made mobile B2C segments. Business users start from these in the builder.
+- id: high_value_at_risk
+  name: High-value postpaid at churn risk
+  category: Retention
+  description: Postpaid lines with ARPU ≥ 200 SAR and a churn score of 0.6 or more.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: subscription.payment_type, operator: eq, value: POSTPAID }
+        - { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }
+        - { kind: attribute, field: subscription.arpu_3m, operator: gte, value: 200 }
+        - { kind: attribute, field: subscription.churn_score, operator: gte, value: 0.6 }
+
+- id: churn_contagion
+  name: Churn contagion (social circle)
+  category: Retention
+  description: >-
+    Active lines where at least two frequent call contacts have already churned.
+    A graph-native signal that attribute-only models miss.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }
+        - kind: network
+          network: calls
+          count_operator: gte
+          count_value: 2
+          edge_where: [{ attribute: calls, operator: gte, value: 5 }]
+          where: { kind: attribute, field: subscription.status, operator: eq, value: CHURNED }
+
+- id: social_influencers
+  name: Social influencers
+  category: Advocacy
+  description: Active lines with 20+ distinct call contacts, which makes them good seeds for referral campaigns.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }
+        - { kind: network, network: calls, count_operator: gte, count_value: 20 }
+
+- id: five_g_upsell
+  name: 5G upsell ready
+  category: Upsell
+  description: Heavy data users on a 5G device who are not yet on an unlimited plan.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }
+        - { kind: attribute, field: device.is_5g, operator: eq, value: true }
+        - { kind: attribute, field: plan.is_unlimited, operator: eq, value: false }
+        - { kind: metric, metric: avg_data_mb, window_months: 3, operator: gt, value: 15000 }
+
+- id: prepaid_to_postpaid
+  name: Prepaid → postpaid migration
+  category: Upsell
+  description: Prepaid lines with high recharge revenue and data usage, plus a good credit class.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: subscription.payment_type, operator: eq, value: PREPAID }
+        - { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }
+        - { kind: metric, metric: avg_revenue, window_months: 3, operator: gte, value: 70 }
+        - { kind: metric, metric: avg_data_mb, window_months: 3, operator: gte, value: 10000 }
+        - { kind: attribute, field: customer.credit_class, operator: in, value: [A, B] }
+
+- id: travelers_without_roaming
+  name: Travelers without a roaming bundle
+  category: Cross-sell
+  description: Lines that used roaming data in the last 6 months but have no roaming add-on.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: metric, metric: total_roaming_mb, window_months: 6, operator: gt, value: 500 }
+        - kind: related
+          entity: addon
+          negate: true
+          where: { kind: attribute, field: addon.category, operator: eq, value: Roaming }
+
+- id: expat_international
+  name: Expat international callers without a bundle
+  category: Cross-sell
+  description: Expat customers with 150+ international minutes over 3 months and no international add-on.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: customer.nationality_group, operator: eq, value: Expat }
+        - { kind: metric, metric: total_intl_min, window_months: 3, operator: gte, value: 150 }
+        - kind: related
+          entity: addon
+          negate: true
+          where: { kind: attribute, field: addon.category, operator: eq, value: International Calls }
+
+- id: device_upgrade
+  name: Device upgrade candidates
+  category: Device
+  description: Gold and Platinum customers still using a device released in 2020 or earlier.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }
+        - { kind: attribute, field: customer.value_tier, operator: in, value: [Platinum, Gold] }
+        - { kind: attribute, field: device.release_year, operator: lte, value: 2020 }
+
+- id: network_detractors
+  name: Network detractors
+  category: Care
+  description: Customers who raised 2+ network tickets in the last 90 days, or who gave a low NPS score.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: or
+      children:
+        - kind: related
+          entity: ticket
+          count_operator: gte
+          count_value: 2
+          where:
+            kind: group
+            op: and
+            children:
+              - { kind: attribute, field: ticket.category, operator: eq, value: Network }
+              - { kind: attribute, field: ticket.opened_at, operator: within_last_days, value: 90 }
+        - { kind: attribute, field: subscription.nps, operator: lte, value: 4 }
+
+- id: youth_digital
+  name: Youth digital natives
+  category: Acquisition
+  description: Customers aged 18–25 who use the self-care app.
+  definition:
+    anchor: customer
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: customer.age, operator: between, value: [18, 25] }
+        - { kind: attribute, field: customer.digital_app_user, operator: eq, value: true }
+
+- id: multi_line_families
+  name: Multi-line households
+  category: Convergence
+  description: Customers with three or more active lines, a natural target for family and FMC bundles.
+  definition:
+    anchor: customer
+    rule:
+      kind: group
+      op: and
+      children:
+        - kind: related
+          entity: subscription
+          count_operator: gte
+          count_value: 3
+          where: { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }

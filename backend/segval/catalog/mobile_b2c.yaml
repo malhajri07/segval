@@ -1,0 +1,287 @@
+# Semantic catalog for mobile consumer (B2C) segmentation.
+#
+# Graph model:
+#   (:Customer)-[:OWNS]->(:Subscription)-[:ON_PLAN]->(:Plan)
+#   (:Subscription)-[:USES_DEVICE]->(:Device)
+#   (:Subscription)-[:HAS_ADDON]->(:Addon)
+#   (:Subscription)-[:HAS_USAGE]->(:MonthlyUsage)
+#   (:Customer)-[:LIVES_IN]->(:City)
+#   (:Customer)-[:RAISED]->(:Ticket)
+#   (:Subscription)-[:CALLED {calls, minutes}]->(:Subscription)
+#   (:Subscription|Customer)-[:MEMBER_OF]->(:Segment)      (materialized segments)
+domain: mobile_b2c
+display: Mobile Consumer (B2C)
+currency: SAR
+
+anchors:
+  - id: subscription
+    entity: subscription
+    display: Subscriptions (MSISDN)
+    description: Segment individual mobile lines.
+    profile_dimensions:
+      - subscription.payment_type
+      - subscription.status
+      - plan.category
+      - device.brand
+      - device.is_5g
+      - customer.value_tier
+      - customer.age
+      - customer.nationality_group
+      - city.region
+      - subscription.tenure_months
+    kpis:
+      - { id: arpu, display: ARPU (3m avg), field: subscription.arpu_3m, unit: SAR }
+      - { id: churn, display: Churn score, field: subscription.churn_score }
+      - { id: data, display: Avg monthly data, metric: avg_data_mb, window_months: 3, unit: MB }
+      - { id: voice, display: Avg monthly voice, metric: avg_voice_min, window_months: 3, unit: min }
+      - { id: roaming, display: Roaming data (6m), metric: total_roaming_mb, window_months: 6, unit: MB }
+    sample_fields:
+      - subscription.msisdn
+      - subscription.payment_type
+      - plan.name
+      - device.model
+      - subscription.arpu_3m
+      - subscription.churn_score
+  - id: customer
+    entity: customer
+    display: Customers
+    description: Segment customers (all of their lines together).
+    profile_dimensions:
+      - customer.value_tier
+      - customer.age
+      - customer.gender
+      - customer.nationality_group
+      - customer.credit_class
+      - city.region
+      - customer.digital_app_user
+    kpis:
+      - { id: lines, display: Lines, metric: line_count, unit: lines }
+      - { id: revenue, display: Revenue (3m), metric: total_revenue, window_months: 3, unit: SAR }
+      - { id: tickets, display: Tickets (6m), metric: ticket_count, window_months: 6 }
+    sample_fields:
+      - customer.customer_id
+      - customer.full_name
+      - customer.value_tier
+      - customer.age
+      - city.name
+
+entities:
+  - id: subscription
+    label: Subscription
+    display: Subscription
+    key: msisdn
+    paths:
+      subscription: []
+      customer: [{ rel: OWNS, many: true, direction: out, label: Subscription }]
+    attributes:
+      - { id: msisdn, property: msisdn, type: string, display: MSISDN }
+      - id: payment_type
+        property: payment_type
+        type: enum
+        display: Payment type
+        values: [PREPAID, POSTPAID]
+      - id: status
+        property: status
+        type: enum
+        display: Line status
+        values: [ACTIVE, SUSPENDED, CHURNED]
+      - { id: activation_date, property: activation_date, type: date, display: Activation date }
+      - id: tenure_months
+        property: tenure_months
+        type: number
+        display: Line tenure
+        unit: months
+        buckets: [6, 12, 24, 48, 96]
+      - id: arpu_3m
+        property: arpu_3m
+        type: number
+        display: ARPU (3 month avg)
+        unit: SAR
+        buckets: [25, 50, 100, 200, 350]
+      - id: churn_score
+        property: churn_score
+        type: number
+        display: Churn propensity score
+        description: Model output between 0 (loyal) and 1 (about to leave).
+        buckets: [0.2, 0.4, 0.6, 0.8]
+      - { id: last_recharge_date, property: last_recharge_date, type: date, display: Last recharge date }
+      - { id: nps, property: nps, type: number, display: NPS response, buckets: [7, 9] }
+
+  - id: customer
+    label: Customer
+    display: Customer
+    key: customer_id
+    paths:
+      subscription: [{ rel: OWNS, direction: in, label: Customer }]
+      customer: []
+    attributes:
+      - { id: customer_id, property: customer_id, type: string, display: Customer ID }
+      - { id: full_name, property: full_name, type: string, display: Name }
+      - { id: gender, property: gender, type: enum, display: Gender, values: [M, F] }
+      - id: age
+        property: age
+        type: number
+        display: Age
+        unit: years
+        buckets: [18, 25, 35, 45, 55, 65]
+      - id: nationality_group
+        property: nationality_group
+        type: enum
+        display: Nationality group
+        values: [Local, Expat]
+      - id: value_tier
+        property: value_tier
+        type: enum
+        display: Value tier
+        values: [Platinum, Gold, Silver, Bronze]
+      - id: credit_class
+        property: credit_class
+        type: enum
+        display: Credit class
+        values: [A, B, C, D]
+      - { id: tenure_months, property: tenure_months, type: number, display: Customer tenure, unit: months, buckets: [12, 36, 60, 120] }
+      - { id: digital_app_user, property: digital_app_user, type: boolean, display: Uses self-care app }
+      - id: preferred_language
+        property: preferred_language
+        type: enum
+        display: Preferred language
+        values: [Arabic, English]
+
+  - id: plan
+    label: Plan
+    display: Tariff plan
+    key: plan_id
+    paths:
+      subscription: [{ rel: ON_PLAN, direction: out, label: Plan }]
+      customer:
+        - { rel: OWNS, many: true, direction: out, label: Subscription }
+        - { rel: ON_PLAN, direction: out, label: Plan }
+    attributes:
+      - { id: name, property: name, type: string, display: Plan name, searchable: true }
+      - id: category
+        property: category
+        type: enum
+        display: Plan category
+        values: [Prepaid Basic, Prepaid Data, Postpaid Core, Postpaid Unlimited, Youth]
+      - { id: monthly_fee, property: monthly_fee, type: number, display: Monthly fee, unit: SAR, buckets: [50, 100, 200, 300] }
+      - { id: data_allowance_gb, property: data_allowance_gb, type: number, display: Data allowance, unit: GB }
+      - { id: is_unlimited, property: is_unlimited, type: boolean, display: Unlimited data }
+
+  - id: device
+    label: Device
+    display: Device
+    key: tac
+    paths:
+      subscription: [{ rel: USES_DEVICE, direction: out, label: Device }]
+      customer:
+        - { rel: OWNS, many: true, direction: out, label: Subscription }
+        - { rel: USES_DEVICE, direction: out, label: Device }
+    attributes:
+      - { id: brand, property: brand, type: string, display: Brand, searchable: true }
+      - { id: model, property: model, type: string, display: Model, searchable: true }
+      - { id: os, property: os, type: enum, display: Operating system, values: [iOS, Android, Other] }
+      - { id: is_5g, property: is_5g, type: boolean, display: 5G capable }
+      - id: price_tier
+        property: price_tier
+        type: enum
+        display: Price tier
+        values: [Low, Mid, High, Premium]
+      - { id: release_year, property: release_year, type: number, display: Release year, buckets: [2019, 2021, 2023] }
+
+  - id: addon
+    label: Addon
+    display: Add-on / bundle
+    key: addon_id
+    paths:
+      subscription: [{ rel: HAS_ADDON, many: true, direction: out, label: Addon }]
+      customer:
+        - { rel: OWNS, many: true, direction: out, label: Subscription }
+        - { rel: HAS_ADDON, many: true, direction: out, label: Addon }
+    attributes:
+      - { id: name, property: name, type: string, display: Add-on name, searchable: true }
+      - id: category
+        property: category
+        type: enum
+        display: Add-on category
+        values: [Roaming, Data, Entertainment, International Calls, Social]
+      - { id: price, property: price, type: number, display: Add-on price, unit: SAR }
+
+  - id: usage
+    label: MonthlyUsage
+    display: Monthly usage
+    key: usage_id
+    paths:
+      subscription: [{ rel: HAS_USAGE, many: true, direction: out, label: MonthlyUsage }]
+      customer:
+        - { rel: OWNS, many: true, direction: out, label: Subscription }
+        - { rel: HAS_USAGE, many: true, direction: out, label: MonthlyUsage }
+    attributes:
+      - { id: month, property: month, type: date, display: Month }
+      - { id: data_mb, property: data_mb, type: number, display: Data, unit: MB }
+      - { id: voice_min, property: voice_min, type: number, display: Voice, unit: min }
+      - { id: sms_count, property: sms_count, type: number, display: SMS }
+      - { id: roaming_mb, property: roaming_mb, type: number, display: Roaming data, unit: MB }
+      - { id: intl_min, property: intl_min, type: number, display: International voice, unit: min }
+      - { id: revenue, property: revenue, type: number, display: Revenue, unit: SAR }
+      - { id: recharge_count, property: recharge_count, type: number, display: Recharges }
+
+  - id: city
+    label: City
+    display: City
+    key: name
+    paths:
+      subscription:
+        - { rel: OWNS, direction: in, label: Customer }
+        - { rel: LIVES_IN, direction: out, label: City }
+      customer: [{ rel: LIVES_IN, direction: out, label: City }]
+    attributes:
+      - { id: name, property: name, type: string, display: City, searchable: true }
+      - id: region
+        property: region
+        type: enum
+        display: Region
+        values: [Central, Western, Eastern, Northern, Southern]
+
+  - id: ticket
+    label: Ticket
+    display: Care ticket
+    key: ticket_id
+    paths:
+      subscription:
+        - { rel: OWNS, direction: in, label: Customer }
+        - { rel: RAISED, many: true, direction: out, label: Ticket }
+      customer: [{ rel: RAISED, many: true, direction: out, label: Ticket }]
+    attributes:
+      - id: category
+        property: category
+        type: enum
+        display: Ticket category
+        values: [Billing, Network, Device, Plan Change, Other]
+      - { id: status, property: status, type: enum, display: Ticket status, values: [OPEN, RESOLVED] }
+      - { id: severity, property: severity, type: enum, display: Severity, values: [Low, Medium, High] }
+      - { id: opened_at, property: opened_at, type: date, display: Opened on }
+
+metrics:
+  - { id: avg_data_mb, display: Avg monthly data, entity: usage, aggregate: avg, property: data_mb, time_property: month, unit: MB }
+  - { id: total_data_mb, display: Total data, entity: usage, aggregate: sum, property: data_mb, time_property: month, unit: MB }
+  - { id: avg_voice_min, display: Avg monthly voice, entity: usage, aggregate: avg, property: voice_min, time_property: month, unit: min }
+  - { id: total_roaming_mb, display: Total roaming data, entity: usage, aggregate: sum, property: roaming_mb, time_property: month, unit: MB, default_window_months: 6 }
+  - { id: total_intl_min, display: Total international minutes, entity: usage, aggregate: sum, property: intl_min, time_property: month, unit: min }
+  - { id: total_revenue, display: Total revenue, entity: usage, aggregate: sum, property: revenue, time_property: month, unit: SAR }
+  - { id: avg_revenue, display: Avg monthly revenue, entity: usage, aggregate: avg, property: revenue, time_property: month, unit: SAR }
+  - { id: total_recharges, display: Number of recharges, entity: usage, aggregate: sum, property: recharge_count, time_property: month }
+  - { id: max_data_mb, display: Peak monthly data, entity: usage, aggregate: max, property: data_mb, time_property: month, unit: MB }
+  - { id: ticket_count, display: Care tickets raised, entity: ticket, aggregate: count, time_property: opened_at, default_window_months: 6 }
+  - { id: line_count, display: Number of lines, entity: subscription, aggregate: count }
+  - { id: addon_count, display: Number of add-ons, entity: addon, aggregate: count }
+
+networks:
+  - id: calls
+    display: Call graph
+    description: Who calls whom (last 3 months, aggregated). Neighbours are other subscriptions.
+    anchor: subscription
+    rel: CALLED
+    direction: both
+    edge_attributes:
+      - { id: calls, property: calls, type: number, display: Number of calls }
+      - { id: minutes, property: minutes, type: number, display: Minutes talked, unit: min }
