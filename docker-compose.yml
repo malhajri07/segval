@@ -1,0 +1,37 @@
+# Local stack: Neo4j + API + web UI.
+#   docker compose up -d --build
+#   docker compose exec api segval-seed --customers 5000
+#   open http://localhost:8080
+services:
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-segval-dev-pw}
+      NEO4J_server_memory_heap_max__size: 2G
+      NEO4J_server_memory_pagecache_size: 1G
+    ports: ["7474:7474", "7687:7687"]
+    volumes: [neo4j-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p $${NEO4J_AUTH#neo4j/} 'RETURN 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build: ./backend
+    environment:
+      SEGVAL_NEO4J_URI: bolt://neo4j:7687
+      SEGVAL_NEO4J_PASSWORD: ${NEO4J_PASSWORD:-segval-dev-pw}
+      SEGVAL_ENABLE_ADMIN: ${SEGVAL_ENABLE_ADMIN:-true}
+      SEGVAL_CORS_ORIGINS: '["http://localhost:8080"]'
+    depends_on:
+      neo4j: { condition: service_healthy }
+    ports: ["8000:8000"]
+
+  web:
+    build: ./frontend
+    depends_on: [api]
+    ports: ["8080:80"]
+
+volumes:
+  neo4j-data:
