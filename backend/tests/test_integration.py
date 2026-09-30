@@ -104,3 +104,50 @@ def test_customer_anchor_kpis(services):
         "kind": "metric", "metric": "line_count", "operator": "gte", "value": 2}}))
     lines = next(k for k in prof["kpis"] if k["id"] == "lines")
     assert lines["segment"] >= 2
+
+
+def test_graph_workspace_linking(services, neo4j_client, catalog):
+    from segval.services.graph import GraphService
+    from segval.services.segments import NotFound
+
+    graph = GraphService(catalog, neo4j_client)
+    start = graph.start_node()
+    assert start and start.startswith("Customer:")
+
+    hits = graph.search("C00000", limit=5)
+    assert hits and all(h["label"] in ("Customer", "Subscription") for h in hits)
+
+    exp = graph.expand("Customer:C0000001", limit=10)
+    assert exp["center"] == "Customer:C0000001"
+    assert {e["type"] for e in exp["edges"]} >= {"OWNS", "LIVES_IN"}
+    assert all("MonthlyUsage" != n["label"] for n in exp["nodes"])
+
+    linked_to_3 = SegmentDefinition.model_validate({"anchor": "customer", "rule": {
+        "kind": "network", "network": "account_links",
+        "where": {"kind": "attribute", "field": "customer.customer_id", "operator": "eq",
+                  "value": "C0000003"}}})
+    before = services[0].preview(linked_to_3, 0)
+    edge = graph.link_accounts("C0000001", "C0000003", "Household")
+    assert edge["props"]["link_type"] == "Household" and edge["props"]["source"] == "user"
+    # re-linking updates the type instead of duplicating the relationship
+    graph.link_accounts("C0000003", "C0000001", "Family")
+    rels = neo4j_client.read(
+        "MATCH (:Customer {customer_id:'C0000001'})-[l:LINKED_TO]-(:Customer {customer_id:'C0000003'}) "
+        "RETURN l.link_type AS t")
+    assert [r["t"] for r in rels] == ["Family"]
+    after = services[0].preview(linked_to_3, 0)
+    assert after["segment_size"] == before["segment_size"] + (0 if before["segment_size"] else 1)
+
+    group = graph.link_group(["C0000010", "C0000011", "C0000012", "C0000011"], "Corporate")
+    assert len(group) == 2
+
+    with pytest.raises(ValueError):
+        graph.link_accounts("C0000001", "C0000001", "Household")
+    with pytest.raises(ValueError):
+        graph.link_accounts("C0000001", "C0000002", "Neighbours")
+    with pytest.raises(NotFound):
+        graph.link_accounts("C0000001", "NOPE", "Household")
+
+    assert graph.unlink_accounts("C0000003", "C0000001") == 1
+    with pytest.raises(NotFound):
+        graph.unlink_accounts("C0000003", "C0000001")

@@ -37,6 +37,11 @@ writes queries by hand.
                  (:Addon) (:MonthlyUsage {month, data_mb, voice_min, roaming_mb, …})
 ```
 
+Account mapping: `(:Customer)-[:LINKED_TO {link_type, source}]-(:Customer)`, created by
+the data load (`source: 'data'`) or by users in the graph workspace (`source: 'user'`).
+The catalog exposes it as the `account_links` network, so segments can use it like
+any other relationship.
+
 Materialized segments live in the same graph: `(:Subscription)-[:MEMBER_OF]->(:Segment)`.
 That makes them reusable as building blocks ("in segment X") and cheap to overlap.
 
@@ -97,6 +102,9 @@ against `$as_of`, the latest month loaded into the graph, not the wall clock.
   * an overlap matrix across materialized segments;
   * a 360° member view with every entity reachable from the member, plus its top
     call contacts.
+* **Graph workspace**: search, neighbourhood expansion ordered by relationship
+  importance, and account linking (`MERGE` on an undirected `LINKED_TO`, so re-linking
+  changes the type instead of duplicating), group linking to a main account, unlinking.
 * **Templates**: 11 ready-made B2C segments (retention, churn contagion,
   influencers, 5G upsell, roaming cross-sell…).
 

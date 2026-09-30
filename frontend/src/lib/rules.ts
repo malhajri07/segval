@@ -166,7 +166,7 @@ export function describe(
     case "network": {
       const n = catalog.networks.find((x) => x.id === node.network);
       const w = node.where ? ` who are ${describe(node.where, catalog, segmentNames)}` : "";
-      return `${not}${COUNT_LABELS[node.count_operator]} ${node.count_value} contacts in ${n?.display ?? node.network}${w}`;
+      return `${not}${COUNT_LABELS[node.count_operator]} ${node.count_value} connections in ${n?.display ?? node.network}${w}`;
     }
     case "segment":
       return `${node.negate ? "not " : ""}in segment “${segmentNames[node.segment_id] ?? node.segment_id}”`;

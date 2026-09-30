@@ -13,11 +13,13 @@
     "demo:data": "cd ../backend && python -m segval.seed.demo_export --customers 2000 --out ../frontend/src/demo/data.json"
   },
   "dependencies": {
+    "d3-force": "^3.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0"
   },
   "devDependencies": {
+    "@types/d3-force": "^3.0.10",
     "@types/node": "^22.20.4",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

@@ -77,6 +77,9 @@ def snapshot(ds: Dataset) -> dict[str, Any]:
         "CALLED": rel("Subscription", "Subscription",
                       [[c["src"], c["dst"], c["calls"], c["minutes"]] for c in ds.calls],
                       ("calls", "minutes")),
+        "LINKED_TO": rel("Customer", "Customer",
+                         [[lk["a"], lk["b"], lk["link_type"], "data"] for lk in ds.links],
+                         ("link_type", "source")),
     }
     catalog = load_catalog("mobile_b2c")
     return {

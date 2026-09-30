@@ -446,7 +446,7 @@ function NetworkEditor({ node, onChange, onRemove, path, ctx, depth }: NodeProps
         <span>has</span>
         <CountPicker catalog={catalog} op={node.count_operator} value={node.count_value}
           onChange={(count_operator, count_value) => onChange({ ...node, count_operator, count_value })} />
-        <span>contacts in</span>
+        <span>connections in</span>
         <select value={node.network} aria-label="Network"
           onChange={(e) => onChange({ ...node, network: e.target.value, edge_where: [] })}>
           {nets.map((n) => <option key={n.id} value={n.id}>{n.display}</option>)}
@@ -460,10 +460,14 @@ function NetworkEditor({ node, onChange, onRemove, path, ctx, depth }: NodeProps
           <div className="cond edge-cond" key={i}>
             <span className="muted small">relationship</span>
             <select value={ec.attribute} aria-label="Relationship attribute"
-              onChange={(e) => setEdge(i, { attribute: e.target.value, operator: "gte", value: 1 })}>
+              onChange={(e) => {
+                const a = net.edge_attributes.find((x) => x.id === e.target.value)!;
+                const operator = catalog.operators[a.type][0];
+                setEdge(i, { attribute: a.id, operator, value: defaultValue(a, operator) });
+              }}>
               {net.edge_attributes.map((a) => <option key={a.id} value={a.id}>{a.display}</option>)}
             </select>
-            <OperatorPicker ops={catalog.operators[attr.type].filter((o) => !LIST_OPS.has(o))} value={ec.operator}
+            <OperatorPicker ops={catalog.operators[attr.type]} value={ec.operator}
               onChange={(operator) => setEdge(i, { ...ec, operator, value: defaultValue(attr, operator) })} />
             <ValueInput attr={attr} op={ec.operator} value={ec.value} onChange={(value) => setEdge(i, { ...ec, value })} />
             {attr.unit && <span className="unit">{attr.unit}</span>}
@@ -474,18 +478,20 @@ function NetworkEditor({ node, onChange, onRemove, path, ctx, depth }: NodeProps
       })}
       <div className="sub-actions">
         {net && net.edge_attributes.length > 0 && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange({
-            ...node, edge_where: [...node.edge_where, { attribute: net.edge_attributes[0].id, operator: "gte", value: 1 }],
-          })}>+ relationship strength</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
+            const a = net.edge_attributes[0];
+            const operator = a.type === "number" ? "gte" : catalog.operators[a.type][0];
+            onChange({ ...node, edge_where: [...node.edge_where, { attribute: a.id, operator, value: a.type === "number" ? 1 : defaultValue(a, operator) }] });
+          }}>+ relationship filter</button>
         )}
         {!node.where && (
-          <SubRule where={null} path={`${path}.where`} ctx={ctx} depth={depth} emptyLabel="contacts who match…"
+          <SubRule where={null} path={`${path}.where`} ctx={ctx} depth={depth} emptyLabel="connections who match…"
             onChange={(where) => onChange({ ...node, where })} />
         )}
       </div>
       {node.where && (
         <>
-          <div className="muted small sub-caption">…where the contact matches:</div>
+          <div className="muted small sub-caption">…where the connected record matches:</div>
           <SubRule where={node.where} path={`${path}.where`} ctx={ctx} depth={depth} emptyLabel=""
             onChange={(where) => onChange({ ...node, where })} />
         </>

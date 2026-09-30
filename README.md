@@ -12,6 +12,11 @@ materializes it for activation.
   the generated Cypher.
 * **Insights**: KPI lift, segment-vs-base distribution with index per dimension,
   overlap matrix, 360° member view.
+* **Graph workspace**: explore customers, lines, plans, devices and call contacts as a
+  graph; drag one customer onto another to link the accounts (Household, Family,
+  Corporate, Same person), or shift-click several and link them as a group. Links are
+  `LINKED_TO` relationships and are immediately usable in segments ("linked to a
+  household member who churned").
 * **Semantic catalog**: the business vocabulary is YAML (`backend/segval/catalog/`);
   the UI is generated from it.
 * **11 templates** for mobile B2C: retention, churn contagion, influencers, 5G upsell,

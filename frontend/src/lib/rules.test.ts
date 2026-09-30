@@ -42,7 +42,7 @@ suite("rules", () => {
       ],
     };
     expect(describe(rule, catalog, { s1: "VIP" })).toBe(
-      "(Subscription status is ACTIVE AND at least 2 contacts in Call graph who are Subscription status is CHURNED AND not in segment “VIP”)",
+      "(Subscription status is ACTIVE AND at least 2 connections in Call graph who are Subscription status is CHURNED AND not in segment “VIP”)",
     );
     expect(countConditions(rule)).toBe(4);
   });

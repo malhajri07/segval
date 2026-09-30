@@ -1,7 +1,7 @@
 import { ApiError } from "./errors";
 import type {
-  Catalog, MemberView, Overlap, Preview, Profile, Row, Segment, SegmentDefinition, SegmentInput,
-  Template,
+  Catalog, Expansion, GraphEdge, GraphNode, MemberView, Overlap, Preview, Profile, Row, Segment,
+  SegmentDefinition, SegmentInput, Template,
 } from "./types";
 
 export { ApiError } from "./errors";
@@ -63,6 +63,17 @@ const httpApi = {
     request<MemberView>("GET", `/api/members/${anchor}/${encodeURIComponent(key)}`),
   seed: (customers: number) =>
     request<Record<string, number | string>>("POST", "/api/admin/seed", { customers }),
+
+  graphStart: () => request<{ node: string | null }>("GET", "/api/graph/start"),
+  graphSearch: (q: string) => request<GraphNode[]>("GET", `/api/graph/search?q=${encodeURIComponent(q)}&limit=15`),
+  graphExpand: (node: string, limit = 30) =>
+    request<Expansion>("GET", `/api/graph/expand?node=${encodeURIComponent(node)}&limit=${limit}`),
+  link: (a: string, b: string, link_type: string) =>
+    request<GraphEdge>("POST", "/api/graph/links", { a, b, link_type }),
+  linkGroup: (accounts: string[], link_type: string) =>
+    request<GraphEdge[]>("POST", "/api/graph/links/group", { accounts, link_type }),
+  unlink: (a: string, b: string) =>
+    request<void>("DELETE", `/api/graph/links?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
 };
 
 type Api = typeof httpApi;
@@ -92,6 +103,12 @@ function demoApi(): Api {
     overlap: (ids) => run((s) => s.overlap(ids)),
     member: (anchor, key) => run((s) => s.member(anchor, key)),
     seed: () => run((s) => { s.reset(); return { segments: s.list().length }; }),
+    graphStart: () => run((s) => ({ node: s.graphStart() })),
+    graphSearch: (q) => run((s) => s.graphSearch(q, 15)),
+    graphExpand: (node, limit = 30) => run((s) => s.graphExpand(node, limit)),
+    link: (a, b, t) => run((s) => s.link(a, b, t)),
+    linkGroup: (accounts, t) => run((s) => s.linkGroup(accounts, t)),
+    unlink: (a, b) => run((s) => s.unlink(a, b)),
   };
 }
 

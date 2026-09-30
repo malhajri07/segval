@@ -75,27 +75,38 @@ export function MemberDrawer({ anchor, memberKey, onClose, onOpen }: {
                 </section>
               );
             })}
-            {Object.entries(data.networks).map(([nid, rows]) => (
-              <section key={nid}>
-                <h3>{catalog.networks.find((n) => n.id === nid)?.display ?? nid} · top contacts</h3>
-                {rows.length === 0 ? <p className="muted small">No contacts</p> : (
-                  <div className="table-wrap">
-                    <table className="data-table compact">
-                      <thead><tr><th>Contact</th><th>Type</th><th>Status</th><th className="num">Calls</th><th className="num">Minutes</th></tr></thead>
-                      <tbody>
-                        {rows.map((r) => (
-                          <tr key={String(r[keyProp])}>
-                            <td><button type="button" className="link-btn" onClick={() => onOpen(String(r[keyProp]))}>{String(r[keyProp])}</button></td>
-                            <td>{cell(r.payment_type)}</td><td>{cell(r.status)}</td>
-                            <td className="num">{cell(r.edge?.calls)}</td><td className="num">{cell(r.edge?.minutes)}</td>
+            {Object.entries(data.networks).map(([nid, rows]) => {
+              const net = catalog.networks.find((n) => n.id === nid);
+              const edgeCols = net?.edge_attributes ?? [];
+              return (
+                <section key={nid}>
+                  <h3>{net?.display ?? nid} ({rows.length})</h3>
+                  {rows.length === 0 ? <p className="muted small">No connections</p> : (
+                    <div className="table-wrap">
+                      <table className="data-table compact">
+                        <thead>
+                          <tr>
+                            <th>Connected {anchor}</th><th>Status</th>
+                            {edgeCols.map((a) => <th key={a.id} className={a.type === "number" ? "num" : ""}>{a.display}</th>)}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
-            ))}
+                        </thead>
+                        <tbody>
+                          {rows.map((r, i) => (
+                            <tr key={`${String(r[keyProp])}-${i}`}>
+                              <td><button type="button" className="link-btn" onClick={() => onOpen(String(r[keyProp]))}>
+                                {String(r.full_name ?? r[keyProp])}
+                              </button></td>
+                              <td>{cell(r.status ?? r.value_tier)}</td>
+                              {edgeCols.map((a) => <td key={a.id} className={a.type === "number" ? "num" : ""}>{cell(r.edge?.[a.property])}</td>)}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
           </div>
         )}
       </aside>

@@ -56,3 +56,14 @@ def test_enum_needs_values():
     )
     with pytest.raises(ValidationError):
         Catalog.model_validate(bad)
+
+
+def test_link_network_must_exist():
+    bad = _minimal(link_network="nope")
+    with pytest.raises(ValidationError):
+        Catalog.model_validate(bad)
+
+
+def test_catalog_declares_account_links(catalog):
+    net = catalog.network(catalog.link_network)
+    assert net is not None and net.anchor == "customer" and net.rel == "LINKED_TO"

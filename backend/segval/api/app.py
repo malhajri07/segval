@@ -18,6 +18,7 @@ from segval.config import Settings, get_settings
 from segval.dsl.compiler import METRIC_OPERATORS, OPERATORS_BY_TYPE, CompileError, q
 from segval.dsl.model import CountOperator, SegmentDefinition
 from segval.graph.client import GraphClient, Neo4jClient, apply_schema
+from segval.services.graph import GraphService
 from segval.services.insights import InsightsService
 from segval.services.segments import Conflict, DataClock, NotFound, SegmentIn, SegmentService
 from segval.templates.loader import load_templates
@@ -31,6 +32,7 @@ class Container:
     clock: DataClock
     segments: SegmentService
     insights: InsightsService
+    graph: GraphService
 
     @classmethod
     def build(cls, settings: Settings, client: GraphClient | None = None) -> Container:
@@ -39,7 +41,7 @@ class Container:
         clock = DataClock(client)
         segments = SegmentService(catalog, client, clock)
         return cls(settings, catalog, client, clock, segments,
-                   InsightsService(catalog, client, segments))
+                   InsightsService(catalog, client, segments), GraphService(catalog, client))
 
 
 def create_app(container: Container | None = None) -> FastAPI:
@@ -112,6 +114,17 @@ class BreakdownRequest(BaseModel):
 
 class OverlapRequest(BaseModel):
     segment_ids: list[str] = Field(min_length=1, max_length=12)
+
+
+class LinkRequest(BaseModel):
+    a: str
+    b: str
+    link_type: str
+
+
+class LinkGroupRequest(BaseModel):
+    accounts: list[str] = Field(min_length=2, max_length=50)
+    link_type: str
 
 
 class SeedRequest(BaseModel):
@@ -254,6 +267,44 @@ def _register_routes(app: FastAPI, settings: Settings) -> None:
     @app.get("/api/members/{anchor}/{key}")
     def member_view(anchor: str, key: str, c: Container = C):
         return c.insights.member_view(anchor, key)
+
+    # ---- graph workspace -------------------------------------------------------------
+    @app.get("/api/graph/search")
+    def graph_search(q: str = Query(min_length=1), limit: int = Query(20, le=100), c: Container = C):
+        return c.graph.search(q, limit)
+
+    @app.get("/api/graph/start")
+    def graph_start(c: Container = C):
+        return {"node": c.graph.start_node()}
+
+    @app.get("/api/graph/expand")
+    def graph_expand(node: str, limit: int = Query(30, ge=1, le=200), usage: bool = False,
+                     c: Container = C):
+        try:
+            return c.graph.expand(node, limit, usage)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/graph/links", status_code=201)
+    def graph_link(req: LinkRequest, c: Container = C):
+        try:
+            return c.graph.link_accounts(req.a, req.b, req.link_type)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/graph/links/group", status_code=201)
+    def graph_link_group(req: LinkGroupRequest, c: Container = C):
+        try:
+            return c.graph.link_group(req.accounts, req.link_type)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+    @app.delete("/api/graph/links", status_code=204)
+    def graph_unlink(a: str, b: str, c: Container = C):
+        try:
+            c.graph.unlink_accounts(a, b)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
 
     # ---- admin (dev) ------------------------------------------------------------------
     if settings.enable_admin:

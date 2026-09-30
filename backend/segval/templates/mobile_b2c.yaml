@@ -175,3 +175,22 @@
           count_operator: gte
           count_value: 3
           where: { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }
+
+- id: household_churn_risk
+  name: Households with a churned member
+  category: Retention
+  description: >-
+    Customers linked to a household or family account that has a churned line.
+    Save the rest of the household before they follow.
+  definition:
+    anchor: customer
+    rule:
+      kind: network
+      network: account_links
+      count_operator: gte
+      count_value: 1
+      edge_where: [{ attribute: link_type, operator: in, value: [Household, Family] }]
+      where:
+        kind: related
+        entity: subscription
+        where: { kind: attribute, field: subscription.status, operator: eq, value: CHURNED }

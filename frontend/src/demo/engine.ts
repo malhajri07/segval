@@ -60,6 +60,24 @@ export class Graph {
     }
   }
 
+  addEdge(type: string, a: GNode, b: GNode, props: Props) {
+    push(a.out, type, { other: b, props });
+    push(b.in, type, { other: a, props });
+  }
+
+  /** Remove every `type` edge between a and b (either direction); returns how many. */
+  removeEdges(type: string, a: GNode, b: GNode): number {
+    let n = 0;
+    for (const [x, y] of [[a, b], [b, a]]) {
+      const out = x.out.get(type) ?? [];
+      const keep = out.filter((e) => e.other !== y);
+      n += out.length - keep.length;
+      x.out.set(type, keep);
+      y.in.set(type, (y.in.get(type) ?? []).filter((e) => e.other !== x));
+    }
+    return n;
+  }
+
   nodes(label: string): GNode[] {
     return [...(this.byLabel.get(label)?.values() ?? [])];
   }

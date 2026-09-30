@@ -134,4 +134,12 @@ def load_dataset(
             "MERGE (c)-[:RAISED]->(t)",
             {"rows": rows},
         )
+    say(f"{len(ds.links)} account links")
+    for rows in _batches(ds.links):
+        client.write(
+            "UNWIND $rows AS r "
+            "MATCH (a:Customer {customer_id: r.a}), (b:Customer {customer_id: r.b}) "
+            "MERGE (a)-[l:LINKED_TO]-(b) SET l.link_type = r.link_type, l.source = 'data'",
+            {"rows": rows},
+        )
     return ds.summary()

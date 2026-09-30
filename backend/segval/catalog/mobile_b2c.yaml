@@ -8,10 +8,12 @@
 #   (:Customer)-[:LIVES_IN]->(:City)
 #   (:Customer)-[:RAISED]->(:Ticket)
 #   (:Subscription)-[:CALLED {calls, minutes}]->(:Subscription)
+#   (:Customer)-[:LINKED_TO {link_type}]-(:Customer)                 (account mapping)
 #   (:Subscription|Customer)-[:MEMBER_OF]->(:Segment)      (materialized segments)
 domain: mobile_b2c
 display: Mobile Consumer (B2C)
 currency: SAR
+link_network: account_links
 
 anchors:
   - id: subscription
@@ -285,3 +287,15 @@ networks:
     edge_attributes:
       - { id: calls, property: calls, type: number, display: Number of calls }
       - { id: minutes, property: minutes, type: number, display: Minutes talked, unit: min }
+  - id: account_links
+    display: Linked accounts
+    description: Customer accounts mapped together (household, family, corporate group, same person).
+    anchor: customer
+    rel: LINKED_TO
+    direction: both
+    edge_attributes:
+      - id: link_type
+        property: link_type
+        type: enum
+        display: Link type
+        values: [Household, Family, Corporate, Same person]

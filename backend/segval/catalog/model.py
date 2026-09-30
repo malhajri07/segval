@@ -179,6 +179,8 @@ class Catalog(BaseModel):
     entities: list[Entity]
     metrics: list[Metric] = Field(default_factory=list)
     networks: list[Network] = Field(default_factory=list)
+    link_network: str | None = None
+    """Network whose relationships users can create by linking accounts in the graph view."""
 
     @model_validator(mode="after")
     def _check(self) -> Catalog:
@@ -215,6 +217,12 @@ class Catalog(BaseModel):
         for n in self.networks:
             if n.anchor not in anchor_ids:
                 raise ValueError(f"network {n.id} references unknown anchor {n.anchor}")
+        if self.link_network:
+            net = self.network(self.link_network)
+            if net is None:
+                raise ValueError(f"link_network {self.link_network} is not a network")
+            if not any(a.type == AttrType.ENUM for a in net.edge_attributes):
+                raise ValueError("link_network needs an enum edge attribute for the link type")
         return self
 
     # ---- lookups -------------------------------------------------------

@@ -76,6 +76,7 @@ export interface Catalog {
   entities: Entity[];
   metrics: Metric[];
   networks: Network[];
+  link_network: string | null;
   operators: Record<AttrType, string[]>;
   metric_operators: string[];
   count_operators: string[];
@@ -188,4 +189,30 @@ export interface SegmentInput {
   description: string;
   tags: string[];
   definition: SegmentDefinition;
+}
+
+// ---- graph workspace -----------------------------------------------------------
+export interface GraphNode {
+  id: string;
+  label: string;
+  key: string;
+  caption: string;
+  entity: string;
+  props: Row;
+  degree?: number;
+}
+
+export interface GraphEdge {
+  id: string;
+  type: string;
+  source: string;
+  target: string;
+  props: Row;
+}
+
+export interface Expansion {
+  center: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  truncated: boolean;
 }

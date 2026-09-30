@@ -577,6 +577,56 @@
    "count": 301
   },
   {
+   "id": "household_churn_risk",
+   "definition": {
+    "anchor": "customer",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "network",
+     "network": "account_links",
+     "where": {
+      "negate": false,
+      "label": null,
+      "kind": "related",
+      "entity": "subscription",
+      "where": {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "CHURNED"
+      },
+      "count_operator": "gte",
+      "count_value": 1
+     },
+     "edge_where": [
+      {
+       "attribute": "link_type",
+       "operator": "in",
+       "value": [
+        "Household",
+        "Family"
+       ]
+      }
+     ],
+     "count_operator": "gte",
+     "count_value": 1
+    }
+   },
+   "predicate": "EXISTS { MATCH (a)-[r2:`LINKED_TO`]-(n1:`Customer`) WHERE r2.`link_type` IN $p0 AND EXISTS { MATCH (n1)-[:`OWNS`]->(x3:`Subscription`) WHERE x3.`status` = $p1 } }",
+   "params": {
+    "p0": [
+     "Household",
+     "Family"
+    ],
+    "p1": "CHURNED",
+    "as_of": "2026-08-01"
+   },
+   "count": 105
+  },
+  {
    "id": "contains",
    "definition": {
     "anchor": "subscription",
@@ -1028,6 +1078,70 @@
     "as_of": "2026-08-01"
    },
    "count": 323
+  },
+  {
+   "id": "links_any",
+   "definition": {
+    "anchor": "customer",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "network",
+     "network": "account_links",
+     "where": null,
+     "edge_where": [],
+     "count_operator": "gte",
+     "count_value": 2
+    }
+   },
+   "predicate": "COUNT { MATCH (a)-[r2:`LINKED_TO`]-(n1:`Customer`) RETURN DISTINCT n1 } >= $p0",
+   "params": {
+    "p0": 2,
+    "as_of": "2026-08-01"
+   },
+   "count": 153
+  },
+  {
+   "id": "links_typed_nested",
+   "definition": {
+    "anchor": "customer",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "network",
+     "network": "account_links",
+     "where": {
+      "negate": false,
+      "label": null,
+      "kind": "attribute",
+      "field": "customer.value_tier",
+      "operator": "in",
+      "value": [
+       "Gold",
+       "Platinum"
+      ]
+     },
+     "edge_where": [
+      {
+       "attribute": "link_type",
+       "operator": "eq",
+       "value": "Corporate"
+      }
+     ],
+     "count_operator": "gte",
+     "count_value": 1
+    }
+   },
+   "predicate": "EXISTS { MATCH (a)-[r2:`LINKED_TO`]-(n1:`Customer`) WHERE r2.`link_type` = $p0 AND n1.`value_tier` IN $p1 }",
+   "params": {
+    "p0": "Corporate",
+    "p1": [
+     "Gold",
+     "Platinum"
+    ],
+    "as_of": "2026-08-01"
+   },
+   "count": 15
   },
   {
    "id": "customer_metric",

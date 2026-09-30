@@ -117,6 +117,7 @@ class Dataset:
     addons: list[dict[str, Any]] = field(default_factory=list)  # {msisdn, addon_id}
     calls: list[dict[str, Any]] = field(default_factory=list)
     tickets: list[dict[str, Any]] = field(default_factory=list)
+    links: list[dict[str, Any]] = field(default_factory=list)  # {a, b, link_type}
 
     def summary(self) -> dict[str, int]:
         return {
@@ -126,6 +127,7 @@ class Dataset:
             "addon_links": len(self.addons),
             "call_edges": len(self.calls),
             "tickets": len(self.tickets),
+            "account_links": len(self.links),
         }
 
 
@@ -184,6 +186,8 @@ def generate(customers: int = 5000, seed: int = 42, as_of: date | None = None,
     _call_graph(rng, ds)
     _churn_and_usage(rng, ds, month_list, plan_by_id)
     _tickets(rng, ds, as_of)
+    # Separate stream so adding links never changes the rest of the dataset.
+    _account_links(random.Random(seed + 1), ds)
     return ds
 
 
@@ -341,3 +345,44 @@ def _tickets(rng, ds: Dataset, as_of: date) -> None:
                 "severity": rng.choices(["Low", "Medium", "High"], [50, 35, 15])[0],
                 "opened_at": opened.isoformat(),
             })
+
+
+LINK_TYPES = ["Household", "Family", "Corporate", "Same person"]
+
+
+def _account_links(rng: random.Random, ds: Dataset) -> None:
+    """Map some accounts together: families sharing a surname in a city, a few
+    corporate groups and duplicate registrations of the same person."""
+    by_family: dict[tuple[str, str], list[dict]] = {}
+    for c in ds.customers:
+        by_family.setdefault((c["city"], c["full_name"].split()[-1]), []).append(c)
+    seen: set[tuple[str, str]] = set()
+
+    def link(a: dict, b: dict, link_type: str) -> None:
+        key = tuple(sorted((a["customer_id"], b["customer_id"])))
+        if a is b or key in seen:
+            return
+        seen.add(key)
+        ds.links.append({"a": key[0], "b": key[1], "link_type": link_type})
+
+    for members in by_family.values():
+        if len(members) < 2:
+            continue
+        rng.shuffle(members)
+        i = 0
+        while i < len(members):
+            size = rng.choice([2, 2, 3, 4])
+            group = members[i:i + size]
+            i += size
+            if len(group) < 2 or rng.random() > 0.35:
+                continue
+            link_type = "Household" if rng.random() < 0.6 else "Family"
+            for other in group[1:]:
+                link(group[0], other, link_type)
+    for _ in range(max(1, len(ds.customers) // 250)):
+        group = rng.sample(ds.customers, rng.randint(3, 6))
+        for other in group[1:]:
+            link(group[0], other, "Corporate")
+    for a, b in zip(rng.sample(ds.customers, len(ds.customers) // 200),
+                    rng.sample(ds.customers, len(ds.customers) // 200), strict=True):
+        link(a, b, "Same person")

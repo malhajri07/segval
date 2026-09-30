@@ -4,8 +4,8 @@
  */
 import { ApiError } from "../api/errors";
 import type {
-  Catalog, Dimension, Kpi, MemberView, Overlap, Preview, Profile, Row, Segment,
-  SegmentDefinition, SegmentInput, Template,
+  Catalog, Dimension, Expansion, GraphEdge, GraphNode, Kpi, MemberView, Overlap, Preview, Profile,
+  Row, Segment, SegmentDefinition, SegmentInput, Template,
 } from "../api/types";
 
 import { CompileError, Compiler, Graph, edges, traverse, type GNode, type Snapshot } from "./engine";
@@ -14,7 +14,11 @@ import raw from "./data.json";
 const STORE_KEY = "segval-demo-v1";
 const SEED_TEMPLATES = ["five_g_upsell", "churn_contagion", "social_influencers", "high_value_at_risk"];
 
-interface Stored { segments: Segment[]; members: Record<string, string[]> }
+interface LinkOp { op: "link" | "unlink"; a: string; b: string; type?: string; at?: string }
+interface Stored { segments: Segment[]; members: Record<string, string[]>; linkOps?: LinkOp[] }
+
+const CAPTION_PROPS = ["full_name", "name", "model", "msisdn", "category", "month"];
+const REL_PRIORITY = ["LINKED_TO", "OWNS", "ON_PLAN", "USES_DEVICE", "LIVES_IN", "HAS_ADDON", "RAISED", "CALLED"];
 
 export function bucketLabels(edgesList: number[]): string[] {
   const fmt = (v: number) => String(v);
@@ -40,6 +44,7 @@ export class DemoService {
   readonly graph: Graph;
   private segs = new Map<string, Segment>();
   private members = new Map<string, Set<GNode>>();
+  private linkOps: LinkOp[] = [];
   private compiler: Compiler;
 
   constructor(snap: Snapshot) {
@@ -63,6 +68,10 @@ export class DemoService {
       if (!text) return false;
       const data = JSON.parse(text) as Stored;
       for (const s of data.segments) this.segs.set(s.id, s);
+      for (const op of data.linkOps ?? []) {
+        try { op.op === "link" ? this.link(op.a, op.b, op.type!, false, op.at) : this.unlink(op.a, op.b, false); }
+        catch { /* the account may no longer exist */ }
+      }
       for (const [id, keys] of Object.entries(data.members)) {
         const s = this.segs.get(id);
         if (!s) continue;
@@ -79,7 +88,7 @@ export class DemoService {
     try {
       const members: Record<string, string[]> = {};
       for (const [id, set] of this.members) members[id] = [...set].map((n) => n.key);
-      localStorage.setItem(STORE_KEY, JSON.stringify({ segments: [...this.segs.values()], members }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ segments: [...this.segs.values()], members, linkOps: this.linkOps }));
     } catch { /* storage unavailable: keep state in memory */ }
   }
 
@@ -429,6 +438,145 @@ export class DemoService {
       .map((s) => ({ id: s.id, name: s.name }));
     return { anchor, key, entities, networks, segments };
   }
+
+  // ---- graph workspace ------------------------------------------------------------------------
+  private linkConfig() {
+    const net = this.catalog.networks.find((n) => n.id === this.catalog.link_network);
+    if (!net) throw new ApiError(400, "this catalog has no link network");
+    const account = this.anchorEntity(net.anchor);
+    const attr = net.edge_attributes.find((a) => a.type === "enum")!;
+    return { net, account, attr };
+  }
+
+  private entityByLabel(label: string) {
+    const ent = this.catalog.entities.find((e) => e.label === label);
+    if (!ent) throw new ApiError(404, `not found: label ${label}`);
+    return ent;
+  }
+
+  private degree(n: GNode) {
+    let d = 0;
+    for (const list of n.out.values()) d += list.length;
+    for (const list of n.in.values()) d += list.length;
+    return d;
+  }
+
+  private toGraphNode(n: GNode, withDegree = true): GraphNode {
+    const ent = this.entityByLabel(n.label);
+    const caption = CAPTION_PROPS.map((p) => n.props[p]).find((v) => v !== undefined && v !== null);
+    return {
+      id: `${n.label}:${n.key}`, label: n.label, key: n.key, caption: caption === undefined ? n.key : String(caption),
+      entity: ent.id, props: { ...n.props }, ...(withDegree ? { degree: this.degree(n) } : {}),
+    };
+  }
+
+  private nodeById(id: string): GNode {
+    const i = id.indexOf(":");
+    if (i <= 0 || i === id.length - 1) throw new ApiError(400, "node ids look like Label:key, e.g. Customer:C0000001");
+    this.entityByLabel(id.slice(0, i));
+    const n = this.graph.get(id.slice(0, i), id.slice(i + 1));
+    if (!n) throw new ApiError(404, `not found: ${id}`);
+    return n;
+  }
+
+  graphStart(): string | null {
+    const { net, account } = this.linkConfig();
+    let best: GNode | null = null;
+    let bestN = 0;
+    for (const n of this.graph.nodes(account.label)) {
+      const c = edges(n, net.rel, "both").length;
+      if (c > bestN || (c === bestN && c > 0 && best && n.key < best.key)) { best = n; bestN = c; }
+    }
+    return best ? `${account.label}:${best.key}` : null;
+  }
+
+  graphSearch(text: string, limit: number): GraphNode[] {
+    const t = text.trim();
+    if (!t) return [];
+    const out: GraphNode[] = [];
+    for (const anchor of this.catalog.anchors) {
+      const ent = this.anchorEntity(anchor.id);
+      const names = ent.attributes.filter((a) => a.type === "string" && a.property !== ent.key).map((a) => a.property);
+      let found = 0;
+      for (const n of this.graph.nodes(ent.label)) {
+        if (found >= limit) break;
+        const hit = n.key.startsWith(t) || names.some((p) => String(n.props[p] ?? "").toLowerCase().includes(t.toLowerCase()));
+        if (hit) { out.push(this.toGraphNode(n, false)); found += 1; }
+      }
+    }
+    return out.slice(0, limit);
+  }
+
+  graphExpand(nodeId: string, limit: number): Expansion {
+    const center = this.nodeById(nodeId);
+    const rank = (t: string) => { const i = REL_PRIORITY.indexOf(t); return i === -1 ? 99 : i; };
+    const rows: { type: string; outgoing: boolean; e: { other: GNode; props: Record<string, unknown> } }[] = [];
+    for (const [type, list] of center.out) for (const e of list) rows.push({ type, outgoing: true, e });
+    for (const [type, list] of center.in) for (const e of list) rows.push({ type, outgoing: false, e });
+    const picked = rows.filter((r) => r.e.other.label !== "MonthlyUsage")
+      .sort((x, y) => rank(x.type) - rank(y.type) || ((y.e.props.calls as number) ?? 0) - ((x.e.props.calls as number) ?? 0))
+      .slice(0, limit);
+    const c = this.toGraphNode(center);
+    const nodes = [c];
+    const edgesOut: GraphEdge[] = [];
+    for (const r of picked) {
+      const other = this.toGraphNode(r.e.other);
+      nodes.push(other);
+      const [src, dst] = r.outgoing ? [c.id, other.id] : [other.id, c.id];
+      edgesOut.push({ id: `${r.type}|${src}|${dst}`, type: r.type, source: src, target: dst, props: { ...r.e.props } });
+    }
+    return { center: c.id, nodes, edges: edgesOut, truncated: this.degree(center) > edgesOut.length };
+  }
+
+  link(a: string, b: string, type: string, persist = true, at?: string): GraphEdge {
+    const { net, account, attr } = this.linkConfig();
+    if (!attr.values?.includes(type)) throw new ApiError(400, `link type must be one of [${attr.values?.map((v) => `'${v}'`).join(", ")}]`);
+    if (a === b) throw new ApiError(400, "an account cannot be linked to itself");
+    const na = this.graph.get(account.label, a);
+    const nb = this.graph.get(account.label, b);
+    if (!na || !nb) throw new ApiError(404, `not found: account ${a} or ${b}`);
+    const existing = edges(na, net.rel, "out").find((e) => e.other === nb);
+    const reverse = existing ? null : edges(nb, net.rel, "out").find((e) => e.other === na);
+    const created_at = at ?? now();
+    const props = { [attr.property]: type, source: "user", created_at };
+    let forward = true;
+    if (existing) Object.assign(existing.props, props);
+    else if (reverse) { Object.assign(reverse.props, props); forward = false; }
+    else this.graph.addEdge(net.rel, na, nb, props);
+    // Keep the mirrored "in" entry's props in sync (same object for new edges).
+    const [src, dst] = forward ? [na, nb] : [nb, na];
+    const inEntry = (dst.in.get(net.rel) ?? []).find((e) => e.other === src);
+    const outEntry = (src.out.get(net.rel) ?? []).find((e) => e.other === dst);
+    if (inEntry && outEntry && inEntry.props !== outEntry.props) Object.assign(inEntry.props, outEntry.props);
+    if (persist) { this.linkOps.push({ op: "link", a, b, type, at: created_at }); this.save(); }
+    const s = `${account.label}:${src.key}`;
+    const d = `${account.label}:${dst.key}`;
+    return { id: `${net.rel}|${s}|${d}`, type: net.rel, source: s, target: d, props: { ...(outEntry?.props ?? props) } };
+  }
+
+  linkGroup(accounts: string[], type: string): GraphEdge[] {
+    const unique = [...new Set(accounts)];
+    if (unique.length < 2) throw new ApiError(400, "choose at least two accounts");
+    return unique.slice(1).map((other) => this.link(unique[0], other, type));
+  }
+
+  unlink(a: string, b: string, persist = true): void {
+    const { net, account } = this.linkConfig();
+    const na = this.graph.get(account.label, a);
+    const nb = this.graph.get(account.label, b);
+    if (!na || !nb || !this.graph.removeEdges(net.rel, na, nb)) throw new ApiError(404, `not found: link between ${a} and ${b}`);
+    if (persist) { this.linkOps.push({ op: "unlink", a, b }); this.save(); }
+  }
+}
+
+// ---- graph workspace (mirrors backend/segval/services/graph.py) -------------------------------
+export interface GraphOps {
+  graphStart(): string | null;
+  graphSearch(text: string, limit: number): GraphNode[];
+  graphExpand(nodeId: string, limit: number): Expansion;
+  link(a: string, b: string, type: string, persist?: boolean, at?: string): GraphEdge;
+  linkGroup(accounts: string[], type: string): GraphEdge[];
+  unlink(a: string, b: string, persist?: boolean): void;
 }
 
 let instance: DemoService | null = null;
