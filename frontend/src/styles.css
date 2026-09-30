@@ -276,3 +276,4 @@ input.num { width: 96px; text-align: right; font-variant-numeric: tabular-nums; 
   .bar-row { grid-template-columns: 84px 1fr 36px 30px; }
   .field-picker { max-width: 100%; }
 }
+.builder .page-head > div { flex: 1; min-width: 0; }
