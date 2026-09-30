@@ -49,12 +49,22 @@ export interface Network {
   edge_attributes: Attribute[];
 }
 
+export interface KpiSpec {
+  id: string;
+  display: string;
+  field: string | null;
+  metric: string | null;
+  window_months: number | null;
+  unit: string | null;
+}
+
 export interface Anchor {
   id: string;
   entity: string;
   display: string;
   description: string;
   profile_dimensions: string[];
+  kpis: KpiSpec[];
   sample_fields: string[];
 }
 
@@ -171,4 +181,11 @@ export interface MemberView {
   entities: Record<string, Row | Row[]>;
   networks: Record<string, (Row & { edge: Row })[]>;
   segments: { id: string; name: string }[];
+}
+
+export interface SegmentInput {
+  name: string;
+  description: string;
+  tags: string[];
+  definition: SegmentDefinition;
 }

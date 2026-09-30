@@ -86,3 +86,11 @@ WHERE ((a.`status` = $p0) AND (COUNT { MATCH (a)-[r2:`CALLED`]-(n1:`Subscription
        WHERE r2.`calls` >= $p1 AND n1.`status` = $p2 RETURN DISTINCT n1 } >= $p3))
 RETURN a
 ```
+
+## Offline demo (no server)
+
+`npm run build:demo` in `frontend/` produces `dist-demo/index.html`: one self-contained
+page with the full UI, a bundled synthetic dataset (2,000 customers) and an in-browser
+engine that is a line-for-line port of the Cypher compiler. `src/demo/parity.test.ts`
+checks it against the Python compiler and real Neo4j counts. Regenerate the data with
+`npm run demo:data` (the parity fixture comes from a live Neo4j run).

@@ -1,0 +1,1123 @@
+{
+ "as_of": "2026-08-01",
+ "cases": [
+  {
+   "id": "high_value_at_risk",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.payment_type",
+       "operator": "eq",
+       "value": "POSTPAID"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "ACTIVE"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.arpu_3m",
+       "operator": "gte",
+       "value": 200
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.churn_score",
+       "operator": "gte",
+       "value": 0.6
+      }
+     ]
+    }
+   },
+   "predicate": "((a.`payment_type` = $p0) AND (a.`status` = $p1) AND (a.`arpu_3m` >= $p2) AND (a.`churn_score` >= $p3))",
+   "params": {
+    "p0": "POSTPAID",
+    "p1": "ACTIVE",
+    "p2": 200,
+    "p3": 0.6,
+    "as_of": "2026-08-01"
+   },
+   "count": 15
+  },
+  {
+   "id": "churn_contagion",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "ACTIVE"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "network",
+       "network": "calls",
+       "where": {
+        "negate": false,
+        "label": null,
+        "kind": "attribute",
+        "field": "subscription.status",
+        "operator": "eq",
+        "value": "CHURNED"
+       },
+       "edge_where": [
+        {
+         "attribute": "calls",
+         "operator": "gte",
+         "value": 5
+        }
+       ],
+       "count_operator": "gte",
+       "count_value": 2
+      }
+     ]
+    }
+   },
+   "predicate": "((a.`status` = $p0) AND (COUNT { MATCH (a)-[r2:`CALLED`]-(n1:`Subscription`) WHERE r2.`calls` >= $p1 AND n1.`status` = $p2 RETURN DISTINCT n1 } >= $p3))",
+   "params": {
+    "p0": "ACTIVE",
+    "p1": 5,
+    "p2": "CHURNED",
+    "p3": 2,
+    "as_of": "2026-08-01"
+   },
+   "count": 163
+  },
+  {
+   "id": "social_influencers",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "ACTIVE"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "network",
+       "network": "calls",
+       "where": null,
+       "edge_where": [],
+       "count_operator": "gte",
+       "count_value": 20
+      }
+     ]
+    }
+   },
+   "predicate": "((a.`status` = $p0) AND (COUNT { MATCH (a)-[r2:`CALLED`]-(n1:`Subscription`) RETURN DISTINCT n1 } >= $p1))",
+   "params": {
+    "p0": "ACTIVE",
+    "p1": 20,
+    "as_of": "2026-08-01"
+   },
+   "count": 71
+  },
+  {
+   "id": "five_g_upsell",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "ACTIVE"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "device.is_5g",
+       "operator": "eq",
+       "value": true
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "plan.is_unlimited",
+       "operator": "eq",
+       "value": false
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "metric",
+       "metric": "avg_data_mb",
+       "window_months": 3,
+       "operator": "gt",
+       "value": 15000
+      }
+     ]
+    }
+   },
+   "predicate": "((a.`status` = $p0) AND (EXISTS { MATCH (a)-[:`USES_DEVICE`]->(x1:`Device`) WHERE x1.`is_5g` = $p1 }) AND (EXISTS { MATCH (a)-[:`ON_PLAN`]->(x2:`Plan`) WHERE x2.`is_unlimited` = $p2 }) AND (coalesce(head(COLLECT { MATCH (a)-[:`HAS_USAGE`]->(m3:`MonthlyUsage`) WHERE m3.`month` > date($as_of) - duration({months: $p3}) AND m3.`month` <= date($as_of) RETURN avg(m3.`data_mb`) AS v }), 0) > $p4))",
+   "params": {
+    "p0": "ACTIVE",
+    "p1": true,
+    "p2": false,
+    "p3": 3,
+    "p4": 15000,
+    "as_of": "2026-08-01"
+   },
+   "count": 545
+  },
+  {
+   "id": "prepaid_to_postpaid",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.payment_type",
+       "operator": "eq",
+       "value": "PREPAID"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "ACTIVE"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "metric",
+       "metric": "avg_revenue",
+       "window_months": 3,
+       "operator": "gte",
+       "value": 70
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "metric",
+       "metric": "avg_data_mb",
+       "window_months": 3,
+       "operator": "gte",
+       "value": 10000
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "customer.credit_class",
+       "operator": "in",
+       "value": [
+        "A",
+        "B"
+       ]
+      }
+     ]
+    }
+   },
+   "predicate": "((a.`payment_type` = $p0) AND (a.`status` = $p1) AND (coalesce(head(COLLECT { MATCH (a)-[:`HAS_USAGE`]->(m1:`MonthlyUsage`) WHERE m1.`month` > date($as_of) - duration({months: $p2}) AND m1.`month` <= date($as_of) RETURN avg(m1.`revenue`) AS v }), 0) >= $p3) AND (coalesce(head(COLLECT { MATCH (a)-[:`HAS_USAGE`]->(m2:`MonthlyUsage`) WHERE m2.`month` > date($as_of) - duration({months: $p4}) AND m2.`month` <= date($as_of) RETURN avg(m2.`data_mb`) AS v }), 0) >= $p5) AND (EXISTS { MATCH (a)<-[:`OWNS`]-(x3:`Customer`) WHERE x3.`credit_class` IN $p6 }))",
+   "params": {
+    "p0": "PREPAID",
+    "p1": "ACTIVE",
+    "p2": 3,
+    "p3": 70,
+    "p4": 3,
+    "p5": 10000,
+    "p6": [
+     "A",
+     "B"
+    ],
+    "as_of": "2026-08-01"
+   },
+   "count": 339
+  },
+  {
+   "id": "travelers_without_roaming",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "metric",
+       "metric": "total_roaming_mb",
+       "window_months": 6,
+       "operator": "gt",
+       "value": 500
+      },
+      {
+       "negate": true,
+       "label": null,
+       "kind": "related",
+       "entity": "addon",
+       "where": {
+        "negate": false,
+        "label": null,
+        "kind": "attribute",
+        "field": "addon.category",
+        "operator": "eq",
+        "value": "Roaming"
+       },
+       "count_operator": "gte",
+       "count_value": 1
+      }
+     ]
+    }
+   },
+   "predicate": "((coalesce(head(COLLECT { MATCH (a)-[:`HAS_USAGE`]->(m1:`MonthlyUsage`) WHERE m1.`month` > date($as_of) - duration({months: $p0}) AND m1.`month` <= date($as_of) RETURN sum(m1.`roaming_mb`) AS v }), 0) > $p1) AND (NOT (EXISTS { MATCH (a)-[:`HAS_ADDON`]->(x2:`Addon`) WHERE x2.`category` = $p2 })))",
+   "params": {
+    "p0": 6,
+    "p1": 500,
+    "p2": "Roaming",
+    "as_of": "2026-08-01"
+   },
+   "count": 247
+  },
+  {
+   "id": "expat_international",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "customer.nationality_group",
+       "operator": "eq",
+       "value": "Expat"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "metric",
+       "metric": "total_intl_min",
+       "window_months": 3,
+       "operator": "gte",
+       "value": 150
+      },
+      {
+       "negate": true,
+       "label": null,
+       "kind": "related",
+       "entity": "addon",
+       "where": {
+        "negate": false,
+        "label": null,
+        "kind": "attribute",
+        "field": "addon.category",
+        "operator": "eq",
+        "value": "International Calls"
+       },
+       "count_operator": "gte",
+       "count_value": 1
+      }
+     ]
+    }
+   },
+   "predicate": "((EXISTS { MATCH (a)<-[:`OWNS`]-(x1:`Customer`) WHERE x1.`nationality_group` = $p0 }) AND (coalesce(head(COLLECT { MATCH (a)-[:`HAS_USAGE`]->(m2:`MonthlyUsage`) WHERE m2.`month` > date($as_of) - duration({months: $p1}) AND m2.`month` <= date($as_of) RETURN sum(m2.`intl_min`) AS v }), 0) >= $p2) AND (NOT (EXISTS { MATCH (a)-[:`HAS_ADDON`]->(x3:`Addon`) WHERE x3.`category` = $p3 })))",
+   "params": {
+    "p0": "Expat",
+    "p1": 3,
+    "p2": 150,
+    "p3": "International Calls",
+    "as_of": "2026-08-01"
+   },
+   "count": 134
+  },
+  {
+   "id": "device_upgrade",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "ACTIVE"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "customer.value_tier",
+       "operator": "in",
+       "value": [
+        "Platinum",
+        "Gold"
+       ]
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "device.release_year",
+       "operator": "lte",
+       "value": 2020
+      }
+     ]
+    }
+   },
+   "predicate": "((a.`status` = $p0) AND (EXISTS { MATCH (a)<-[:`OWNS`]-(x1:`Customer`) WHERE x1.`value_tier` IN $p1 }) AND (EXISTS { MATCH (a)-[:`USES_DEVICE`]->(x2:`Device`) WHERE x2.`release_year` <= $p2 }))",
+   "params": {
+    "p0": "ACTIVE",
+    "p1": [
+     "Platinum",
+     "Gold"
+    ],
+    "p2": 2020,
+    "as_of": "2026-08-01"
+   },
+   "count": 400
+  },
+  {
+   "id": "network_detractors",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "or",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "related",
+       "entity": "ticket",
+       "where": {
+        "negate": false,
+        "label": null,
+        "kind": "group",
+        "op": "and",
+        "children": [
+         {
+          "negate": false,
+          "label": null,
+          "kind": "attribute",
+          "field": "ticket.category",
+          "operator": "eq",
+          "value": "Network"
+         },
+         {
+          "negate": false,
+          "label": null,
+          "kind": "attribute",
+          "field": "ticket.opened_at",
+          "operator": "within_last_days",
+          "value": 90
+         }
+        ]
+       },
+       "count_operator": "gte",
+       "count_value": 2
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.nps",
+       "operator": "lte",
+       "value": 4
+      }
+     ]
+    }
+   },
+   "predicate": "((COUNT { MATCH (a)<-[:`OWNS`]-(:`Customer`)-[:`RAISED`]->(x1:`Ticket`) WHERE ((x1.`category` = $p0) AND ((x1.`opened_at` >= date($as_of) - duration({days: $p1}) AND x1.`opened_at` <= date($as_of)))) RETURN DISTINCT x1 } >= $p2) OR (a.`nps` <= $p3))",
+   "params": {
+    "p0": "Network",
+    "p1": 90,
+    "p2": 2,
+    "p3": 4,
+    "as_of": "2026-08-01"
+   },
+   "count": 322
+  },
+  {
+   "id": "youth_digital",
+   "definition": {
+    "anchor": "customer",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "customer.age",
+       "operator": "between",
+       "value": [
+        18,
+        25
+       ]
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "customer.digital_app_user",
+       "operator": "eq",
+       "value": true
+      }
+     ]
+    }
+   },
+   "predicate": "(((a.`age` >= $p0 AND a.`age` <= $p1)) AND (a.`digital_app_user` = $p2))",
+   "params": {
+    "p0": 18,
+    "p1": 25,
+    "p2": true,
+    "as_of": "2026-08-01"
+   },
+   "count": 266
+  },
+  {
+   "id": "multi_line_families",
+   "definition": {
+    "anchor": "customer",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "related",
+       "entity": "subscription",
+       "where": {
+        "negate": false,
+        "label": null,
+        "kind": "attribute",
+        "field": "subscription.status",
+        "operator": "eq",
+        "value": "ACTIVE"
+       },
+       "count_operator": "gte",
+       "count_value": 3
+      }
+     ]
+    }
+   },
+   "predicate": "COUNT { MATCH (a)-[:`OWNS`]->(x1:`Subscription`) WHERE x1.`status` = $p0 RETURN DISTINCT x1 } >= $p1",
+   "params": {
+    "p0": "ACTIVE",
+    "p1": 3,
+    "as_of": "2026-08-01"
+   },
+   "count": 301
+  },
+  {
+   "id": "contains",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "attribute",
+     "field": "device.model",
+     "operator": "contains",
+     "value": "GALAXY"
+    }
+   },
+   "predicate": "EXISTS { MATCH (a)-[:`USES_DEVICE`]->(x1:`Device`) WHERE toLower(x1.`model`) CONTAINS $p0 }",
+   "params": {
+    "p0": "galaxy",
+    "as_of": "2026-08-01"
+   },
+   "count": 931
+  },
+  {
+   "id": "starts_with",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "attribute",
+     "field": "plan.name",
+     "operator": "starts_with",
+     "value": "post"
+    }
+   },
+   "predicate": "EXISTS { MATCH (a)-[:`ON_PLAN`]->(x1:`Plan`) WHERE toLower(x1.`name`) STARTS WITH $p0 }",
+   "params": {
+    "p0": "post",
+    "as_of": "2026-08-01"
+   },
+   "count": 1284
+  },
+  {
+   "id": "ends_with_neg",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": true,
+     "label": null,
+     "kind": "attribute",
+     "field": "device.model",
+     "operator": "ends_with",
+     "value": "pro"
+    }
+   },
+   "predicate": "NOT (EXISTS { MATCH (a)-[:`USES_DEVICE`]->(x1:`Device`) WHERE toLower(x1.`model`) ENDS WITH $p0 })",
+   "params": {
+    "p0": "pro",
+    "as_of": "2026-08-01"
+   },
+   "count": 2989
+  },
+  {
+   "id": "not_in",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "attribute",
+     "field": "customer.value_tier",
+     "operator": "not_in",
+     "value": [
+      "Bronze",
+      "Silver"
+     ]
+    }
+   },
+   "predicate": "EXISTS { MATCH (a)<-[:`OWNS`]-(x1:`Customer`) WHERE NOT x1.`value_tier` IN $p0 }",
+   "params": {
+    "p0": [
+     "Bronze",
+     "Silver"
+    ],
+    "as_of": "2026-08-01"
+   },
+   "count": 1842
+  },
+  {
+   "id": "is_null",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "attribute",
+     "field": "subscription.last_recharge_date",
+     "operator": "is_null",
+     "value": null
+    }
+   },
+   "predicate": "a.`last_recharge_date` IS NULL",
+   "params": {
+    "as_of": "2026-08-01"
+   },
+   "count": 1398
+  },
+  {
+   "id": "is_not_null_or",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "or",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.last_recharge_date",
+       "operator": "is_not_null",
+       "value": null
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.nps",
+       "operator": "gte",
+       "value": 9
+      }
+     ]
+    }
+   },
+   "predicate": "((a.`last_recharge_date` IS NOT NULL) OR (a.`nps` >= $p0))",
+   "params": {
+    "p0": 9,
+    "as_of": "2026-08-01"
+   },
+   "count": 2626
+  },
+  {
+   "id": "date_between",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "attribute",
+     "field": "subscription.activation_date",
+     "operator": "between",
+     "value": [
+      "2024-01-01",
+      "2025-06-30"
+     ]
+    }
+   },
+   "predicate": "(a.`activation_date` >= date($p0) AND a.`activation_date` <= date($p1))",
+   "params": {
+    "p0": "2024-01-01",
+    "p1": "2025-06-30",
+    "as_of": "2026-08-01"
+   },
+   "count": 694
+  },
+  {
+   "id": "before_days",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "attribute",
+     "field": "subscription.last_recharge_date",
+     "operator": "before_last_days",
+     "value": 20
+    }
+   },
+   "predicate": "a.`last_recharge_date` < date($as_of) - duration({days: $p0})",
+   "params": {
+    "p0": 20,
+    "as_of": "2026-08-01"
+   },
+   "count": 138
+  },
+  {
+   "id": "date_eq",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "attribute",
+     "field": "usage.month",
+     "operator": "eq",
+     "value": "2026-03-01"
+    }
+   },
+   "predicate": "EXISTS { MATCH (a)-[:`HAS_USAGE`]->(x1:`MonthlyUsage`) WHERE x1.`month` = date($p0) }",
+   "params": {
+    "p0": "2026-03-01",
+    "as_of": "2026-08-01"
+   },
+   "count": 3366
+  },
+  {
+   "id": "bool_false",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "attribute",
+     "field": "device.is_5g",
+     "operator": "eq",
+     "value": false
+    }
+   },
+   "predicate": "EXISTS { MATCH (a)-[:`USES_DEVICE`]->(x1:`Device`) WHERE x1.`is_5g` = $p0 }",
+   "params": {
+    "p0": false,
+    "as_of": "2026-08-01"
+   },
+   "count": 1566
+  },
+  {
+   "id": "not_with_nulls",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": true,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.last_recharge_date",
+       "operator": "gt",
+       "value": "2026-08-10"
+      }
+     ]
+    }
+   },
+   "predicate": "NOT (a.`last_recharge_date` > date($p0))",
+   "params": {
+    "p0": "2026-08-10",
+    "as_of": "2026-08-01"
+   },
+   "count": 847
+  },
+  {
+   "id": "metric_between",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "metric",
+     "metric": "avg_voice_min",
+     "window_months": 2,
+     "operator": "between",
+     "value": [
+      100,
+      300
+     ]
+    }
+   },
+   "predicate": "(coalesce(head(COLLECT { MATCH (a)-[:`HAS_USAGE`]->(m1:`MonthlyUsage`) WHERE m1.`month` > date($as_of) - duration({months: $p0}) AND m1.`month` <= date($as_of) RETURN avg(m1.`voice_min`) AS v }), 0) >= $p1 AND coalesce(head(COLLECT { MATCH (a)-[:`HAS_USAGE`]->(m1:`MonthlyUsage`) WHERE m1.`month` > date($as_of) - duration({months: $p0}) AND m1.`month` <= date($as_of) RETURN avg(m1.`voice_min`) AS v }), 0) <= $p2)",
+   "params": {
+    "p0": 2,
+    "p1": 100,
+    "p2": 300,
+    "as_of": "2026-08-01"
+   },
+   "count": 1651
+  },
+  {
+   "id": "metric_max",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "metric",
+     "metric": "max_data_mb",
+     "window_months": 6,
+     "operator": "lt",
+     "value": 2000
+    }
+   },
+   "predicate": "coalesce(head(COLLECT { MATCH (a)-[:`HAS_USAGE`]->(m1:`MonthlyUsage`) WHERE m1.`month` > date($as_of) - duration({months: $p0}) AND m1.`month` <= date($as_of) RETURN max(m1.`data_mb`) AS v }), 0) < $p1",
+   "params": {
+    "p0": 6,
+    "p1": 2000,
+    "as_of": "2026-08-01"
+   },
+   "count": 245
+  },
+  {
+   "id": "metric_count_tickets",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "metric",
+     "metric": "ticket_count",
+     "window_months": 1,
+     "operator": "gte",
+     "value": 1
+    }
+   },
+   "predicate": "coalesce(head(COLLECT { MATCH (a)<-[:`OWNS`]-(:`Customer`)-[:`RAISED`]->(m1:`Ticket`) WHERE m1.`opened_at` > date($as_of) - duration({months: $p0}) AND m1.`opened_at` <= date($as_of) RETURN count(m1) AS v }), 0) >= $p1",
+   "params": {
+    "p0": 1,
+    "p1": 1,
+    "as_of": "2026-08-01"
+   },
+   "count": 138
+  },
+  {
+   "id": "related_count",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "related",
+     "entity": "addon",
+     "where": null,
+     "count_operator": "gte",
+     "count_value": 2
+    }
+   },
+   "predicate": "COUNT { MATCH (a)-[:`HAS_ADDON`]->(x1:`Addon`) RETURN DISTINCT x1 } >= $p0",
+   "params": {
+    "p0": 2,
+    "as_of": "2026-08-01"
+   },
+   "count": 419
+  },
+  {
+   "id": "related_none",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "related",
+     "entity": "ticket",
+     "where": null,
+     "count_operator": "eq",
+     "count_value": 0
+    }
+   },
+   "predicate": "NOT EXISTS { MATCH (a)<-[:`OWNS`]-(:`Customer`)-[:`RAISED`]->(x1:`Ticket`) }",
+   "params": {
+    "as_of": "2026-08-01"
+   },
+   "count": 2788
+  },
+  {
+   "id": "related_lt",
+   "definition": {
+    "anchor": "customer",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "related",
+     "entity": "subscription",
+     "where": {
+      "negate": false,
+      "label": null,
+      "kind": "attribute",
+      "field": "subscription.payment_type",
+      "operator": "eq",
+      "value": "POSTPAID"
+     },
+     "count_operator": "lt",
+     "count_value": 2
+    }
+   },
+   "predicate": "COUNT { MATCH (a)-[:`OWNS`]->(x1:`Subscription`) WHERE x1.`payment_type` = $p0 RETURN DISTINCT x1 } < $p1",
+   "params": {
+    "p0": "POSTPAID",
+    "p1": 2,
+    "as_of": "2026-08-01"
+   },
+   "count": 1727
+  },
+  {
+   "id": "nested_network",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "network",
+     "network": "calls",
+     "where": {
+      "negate": false,
+      "label": null,
+      "kind": "group",
+      "op": "or",
+      "children": [
+       {
+        "negate": false,
+        "label": null,
+        "kind": "network",
+        "network": "calls",
+        "where": null,
+        "edge_where": [],
+        "count_operator": "gt",
+        "count_value": 10
+       },
+       {
+        "negate": false,
+        "label": null,
+        "kind": "attribute",
+        "field": "customer.age",
+        "operator": "lt",
+        "value": 25
+       }
+      ]
+     },
+     "edge_where": [
+      {
+       "attribute": "minutes",
+       "operator": "between",
+       "value": [
+        20,
+        400
+       ]
+      }
+     ],
+     "count_operator": "gte",
+     "count_value": 3
+    }
+   },
+   "predicate": "COUNT { MATCH (a)-[r2:`CALLED`]-(n1:`Subscription`) WHERE (r2.`minutes` >= $p0 AND r2.`minutes` <= $p1) AND ((COUNT { MATCH (n1)-[r4:`CALLED`]-(n3:`Subscription`) RETURN DISTINCT n3 } > $p2) OR (EXISTS { MATCH (n1)<-[:`OWNS`]-(x5:`Customer`) WHERE x5.`age` < $p3 })) RETURN DISTINCT n1 } >= $p4",
+   "params": {
+    "p0": 20,
+    "p1": 400,
+    "p2": 10,
+    "p3": 25,
+    "p4": 3,
+    "as_of": "2026-08-01"
+   },
+   "count": 323
+  },
+  {
+   "id": "customer_metric",
+   "definition": {
+    "anchor": "customer",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "metric",
+       "metric": "line_count",
+       "window_months": null,
+       "operator": "gte",
+       "value": 2
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "metric",
+       "metric": "total_revenue",
+       "window_months": 3,
+       "operator": "gt",
+       "value": 600
+      }
+     ]
+    }
+   },
+   "predicate": "((coalesce(head(COLLECT { MATCH (a)-[:`OWNS`]->(m1:`Subscription`) RETURN count(m1) AS v }), 0) >= $p0) AND (coalesce(head(COLLECT { MATCH (a)-[:`OWNS`]->(:`Subscription`)-[:`HAS_USAGE`]->(m2:`MonthlyUsage`) WHERE m2.`month` > date($as_of) - duration({months: $p1}) AND m2.`month` <= date($as_of) RETURN sum(m2.`revenue`) AS v }), 0) > $p2))",
+   "params": {
+    "p0": 2,
+    "p1": 3,
+    "p2": 600,
+    "as_of": "2026-08-01"
+   },
+   "count": 630
+  }
+ ],
+ "errors": [
+  {
+   "id": "bad_op",
+   "rule": {
+    "kind": "attribute",
+    "field": "plan.category",
+    "operator": "gt",
+    "value": 1
+   },
+   "message": "operator 'gt' is not valid for enum field 'Plan category'",
+   "path": "rule"
+  },
+  {
+   "id": "bad_enum",
+   "rule": {
+    "kind": "attribute",
+    "field": "plan.category",
+    "operator": "eq",
+    "value": "Gold"
+   },
+   "message": "'Gold' is not a valid 'Plan category'; choose from ['Prepaid Basic', 'Prepaid Data', 'Postpaid Core', 'Postpaid Unlimited', 'Youth']",
+   "path": "rule"
+  },
+  {
+   "id": "bad_num",
+   "rule": {
+    "kind": "attribute",
+    "field": "subscription.arpu_3m",
+    "operator": "gt",
+    "value": "abc"
+   },
+   "message": "expected a number, got 'abc'",
+   "path": "rule"
+  },
+  {
+   "id": "restricted",
+   "rule": {
+    "kind": "related",
+    "entity": "addon",
+    "where": {
+     "kind": "attribute",
+     "field": "customer.age",
+     "operator": "gt",
+     "value": 3
+    }
+   },
+   "message": "field 'customer.age' is not available here; use fields of addon",
+   "path": "rule.where"
+  }
+ ]
+}

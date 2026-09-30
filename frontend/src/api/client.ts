@@ -1,12 +1,14 @@
+import { ApiError } from "./errors";
 import type {
-  Catalog, MemberView, Overlap, Preview, Profile, Row, Segment, SegmentDefinition, Template,
+  Catalog, MemberView, Overlap, Preview, Profile, Row, Segment, SegmentDefinition, SegmentInput,
+  Template,
 } from "./types";
 
-export class ApiError extends Error {
-  constructor(public status: number, message: string, public path?: string) {
-    super(message);
-  }
-}
+export { ApiError } from "./errors";
+export type { SegmentInput } from "./types";
+
+/** True in the offline demo build (VITE_DEMO=1): the API runs in the browser. */
+export const DEMO = !!import.meta.env.VITE_DEMO;
 
 async function request<T>(method: string, url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, {
@@ -31,14 +33,7 @@ async function request<T>(method: string, url: string, body?: unknown, signal?: 
   return res.json() as Promise<T>;
 }
 
-export interface SegmentInput {
-  name: string;
-  description: string;
-  tags: string[];
-  definition: SegmentDefinition;
-}
-
-export const api = {
+const httpApi = {
   catalog: () => request<Catalog>("GET", "/api/catalog"),
   values: (field: string, prefix = "") =>
     request<{ values: string[] }>("GET",
@@ -69,3 +64,35 @@ export const api = {
   seed: (customers: number) =>
     request<Record<string, number | string>>("POST", "/api/admin/seed", { customers }),
 };
+
+type Api = typeof httpApi;
+
+function demoApi(): Api {
+  const svc = import("../demo/service").then((m) => m.demoService());
+  const run = async <T>(fn: (s: Awaited<typeof svc>) => T): Promise<T> => {
+    const s = await svc;
+    await new Promise((r) => setTimeout(r, 0)); // let the UI paint "Counting…" first
+    return fn(s);
+  };
+  return {
+    catalog: () => run((s) => s.catalog),
+    values: (field, prefix = "") => run((s) => s.values(field, prefix)),
+    templates: () => run((s) => s.templates),
+    compile: (definition) => run((s) => s.cypher(definition)),
+    preview: (definition, sample_size = 25) => run((s) => s.preview(definition, sample_size)),
+    segments: () => run((s) => s.list()),
+    segment: (id) => run((s) => s.segment(id)),
+    createSegment: (body) => run((s) => s.create(body)),
+    updateSegment: (id, body) => run((s) => s.update(id, body)),
+    deleteSegment: (id) => run((s) => s.delete(id)),
+    materialize: (id) => run((s) => s.materialize(id)),
+    members: (id, limit = 50, skip = 0) => run((s) => s.membersPage(id, limit, skip)),
+    exportUrl: () => "",
+    profile: (body) => run((s) => s.profile(body)),
+    overlap: (ids) => run((s) => s.overlap(ids)),
+    member: (anchor, key) => run((s) => s.member(anchor, key)),
+    seed: () => run((s) => { s.reset(); return { segments: s.list().length }; }),
+  };
+}
+
+export const api: Api = DEMO ? demoApi() : httpApi;

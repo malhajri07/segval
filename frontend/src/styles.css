@@ -277,3 +277,6 @@ input.num { width: 96px; text-align: right; font-variant-numeric: tabular-nums; 
   .field-picker { max-width: 100%; }
 }
 .builder .page-head > div { flex: 1; min-width: 0; }
+
+.demo-badge { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+@media (max-width: 640px) { .demo-badge { display: none; } }

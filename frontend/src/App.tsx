@@ -1,4 +1,5 @@
 import { NavLink, Route, Routes } from "react-router-dom";
+import { DEMO } from "./api/client";
 import { CatalogProvider } from "./lib/catalog";
 import { BuilderPage } from "./pages/BuilderPage";
 import { CatalogPage } from "./pages/CatalogPage";
@@ -17,6 +18,11 @@ export function App() {
           <NavLink to="/overlap">Overlap</NavLink>
           <NavLink to="/catalog">Catalog</NavLink>
         </nav>
+        {DEMO && (
+          <span className="demo-badge" title="Runs entirely in this page on a synthetic sample of 2,000 customers">
+            Demo · sample data
+          </span>
+        )}
       </header>
       <main>
         <CatalogProvider>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { DEMO, api } from "../api/client";
 import { ProfileView, ShareMeter } from "../components/Charts";
 import { MemberDrawer } from "../components/MemberDrawer";
 import { useCatalog } from "../lib/catalog";
@@ -18,6 +18,7 @@ export function SegmentPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [member, setMember] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const seg = useAsync(() => api.segment(id), [id]);
   const all = useAsync(() => api.segments(), []);
@@ -50,12 +51,23 @@ export function SegmentPage() {
             onClick={() => run("materialize", async () => { await api.materialize(s.id); seg.reload(); })}>
             {busy === "materialize" ? "Materializing…" : s.member_count === null ? "Materialize" : "Refresh members"}
           </button>
-          <a className={`btn${s.member_count === null ? " disabled" : ""}`} href={api.exportUrl(s.id)}
-            aria-disabled={s.member_count === null}>Export CSV</a>
-          <button type="button" className="btn btn-danger" disabled={!!busy}
-            onClick={() => confirm(`Delete “${s.name}”?`) && run("delete", async () => { await api.deleteSegment(s.id); navigate("/"); })}>
-            Delete
-          </button>
+          {!DEMO && (
+            <a className={`btn${s.member_count === null ? " disabled" : ""}`} href={api.exportUrl(s.id)}
+              aria-disabled={s.member_count === null}>Export CSV</a>
+          )}
+          {confirmDelete ? (
+            <>
+              <button type="button" className="btn btn-danger" disabled={!!busy}
+                onClick={() => run("delete", async () => { await api.deleteSegment(s.id); navigate("/"); })}>
+                {busy === "delete" ? "Deleting…" : "Confirm delete"}
+              </button>
+              <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>Keep</button>
+            </>
+          ) : (
+            <button type="button" className="btn btn-danger" disabled={!!busy} onClick={() => setConfirmDelete(true)}>
+              Delete
+            </button>
+          )}
         </div>
       </div>
       {actionError && <p className="error" role="alert">{actionError}</p>}

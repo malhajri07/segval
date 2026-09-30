@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../api/client";
+import { DEMO, api } from "../api/client";
 import { useCatalog } from "../lib/catalog";
 
 export function CatalogPage() {
@@ -80,6 +80,7 @@ export function CatalogPage() {
         ))}
       </section>
 
+      {!DEMO && <>
       <h2>Sample data</h2>
       <section className="card">
         <p className="muted small">Development only: generates a synthetic mobile base (personas, call graph, churn clusters).</p>
@@ -90,6 +91,7 @@ export function CatalogPage() {
         </div>
         {seedState && <p className="small">{seedState}</p>}
       </section>
+      </>}
     </div>
   );
 }
