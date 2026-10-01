@@ -1,5 +1,5 @@
 {
- "as_of": "2026-08-01",
+ "as_of": "2026-09-01",
  "cases": [
   {
    "id": "high_value_at_risk",
@@ -52,7 +52,7 @@
     "p1": "ACTIVE",
     "p2": 200,
     "p3": 0.6,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 15
   },
@@ -106,7 +106,7 @@
     "p1": 5,
     "p2": "CHURNED",
     "p3": 2,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 163
   },
@@ -145,7 +145,7 @@
    "params": {
     "p0": "ACTIVE",
     "p1": 20,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 71
   },
@@ -202,7 +202,7 @@
     "p2": false,
     "p3": 3,
     "p4": 15000,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 545
   },
@@ -276,7 +276,7 @@
      "A",
      "B"
     ],
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 339
   },
@@ -323,7 +323,7 @@
     "p0": 6,
     "p1": 500,
     "p2": "Roaming",
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 247
   },
@@ -379,7 +379,7 @@
     "p1": 3,
     "p2": 150,
     "p3": "International Calls",
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 134
   },
@@ -431,7 +431,7 @@
      "Gold"
     ],
     "p2": 2020,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 400
   },
@@ -494,7 +494,7 @@
     "p1": 90,
     "p2": 2,
     "p3": 4,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 322
   },
@@ -535,7 +535,7 @@
     "p0": 18,
     "p1": 25,
     "p2": true,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 266
   },
@@ -572,7 +572,7 @@
    "params": {
     "p0": "ACTIVE",
     "p1": 3,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 301
   },
@@ -622,9 +622,100 @@
      "Family"
     ],
     "p1": "CHURNED",
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 105
+  },
+  {
+   "id": "influencers_in_churning_communities",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "ACTIVE"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.influence_score",
+       "operator": "gte",
+       "value": 90
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.community_churn_rate",
+       "operator": "gte",
+       "value": 0.15
+      }
+     ]
+    }
+   },
+   "predicate": "((a.`status` = $p0) AND (a.`influence_score` >= $p1) AND (a.`community_churn_rate` >= $p2))",
+   "params": {
+    "p0": "ACTIVE",
+    "p1": 90,
+    "p2": 0.15,
+    "as_of": "2026-09-01"
+   },
+   "count": 31
+  },
+  {
+   "id": "household_fmc",
+   "definition": {
+    "anchor": "customer",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "customer.household_size",
+       "operator": "gte",
+       "value": 3
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "related",
+       "entity": "subscription",
+       "where": {
+        "negate": false,
+        "label": null,
+        "kind": "attribute",
+        "field": "subscription.status",
+        "operator": "eq",
+        "value": "ACTIVE"
+       },
+       "count_operator": "gte",
+       "count_value": 1
+      }
+     ]
+    }
+   },
+   "predicate": "((a.`household_size` >= $p0) AND (EXISTS { MATCH (a)-[:`OWNS`]->(x1:`Subscription`) WHERE x1.`status` = $p1 }))",
+   "params": {
+    "p0": 3,
+    "p1": "ACTIVE",
+    "as_of": "2026-09-01"
+   },
+   "count": 418
   },
   {
    "id": "contains",
@@ -642,7 +733,7 @@
    "predicate": "EXISTS { MATCH (a)-[:`USES_DEVICE`]->(x1:`Device`) WHERE toLower(x1.`model`) CONTAINS $p0 }",
    "params": {
     "p0": "galaxy",
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 931
   },
@@ -662,7 +753,7 @@
    "predicate": "EXISTS { MATCH (a)-[:`ON_PLAN`]->(x1:`Plan`) WHERE toLower(x1.`name`) STARTS WITH $p0 }",
    "params": {
     "p0": "post",
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 1284
   },
@@ -682,7 +773,7 @@
    "predicate": "NOT (EXISTS { MATCH (a)-[:`USES_DEVICE`]->(x1:`Device`) WHERE toLower(x1.`model`) ENDS WITH $p0 })",
    "params": {
     "p0": "pro",
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 2989
   },
@@ -708,7 +799,7 @@
      "Bronze",
      "Silver"
     ],
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 1842
   },
@@ -727,7 +818,7 @@
    },
    "predicate": "a.`last_recharge_date` IS NULL",
    "params": {
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 1398
   },
@@ -763,7 +854,7 @@
    "predicate": "((a.`last_recharge_date` IS NOT NULL) OR (a.`nps` >= $p0))",
    "params": {
     "p0": 9,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 2626
   },
@@ -787,9 +878,9 @@
    "params": {
     "p0": "2024-01-01",
     "p1": "2025-06-30",
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
-   "count": 694
+   "count": 684
   },
   {
    "id": "before_days",
@@ -807,7 +898,7 @@
    "predicate": "a.`last_recharge_date` < date($as_of) - duration({days: $p0})",
    "params": {
     "p0": 20,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 138
   },
@@ -827,9 +918,9 @@
    "predicate": "EXISTS { MATCH (a)-[:`HAS_USAGE`]->(x1:`MonthlyUsage`) WHERE x1.`month` = date($p0) }",
    "params": {
     "p0": "2026-03-01",
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
-   "count": 3366
+   "count": 0
   },
   {
    "id": "bool_false",
@@ -847,7 +938,7 @@
    "predicate": "EXISTS { MATCH (a)-[:`USES_DEVICE`]->(x1:`Device`) WHERE x1.`is_5g` = $p0 }",
    "params": {
     "p0": false,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 1566
   },
@@ -875,9 +966,9 @@
    "predicate": "NOT (a.`last_recharge_date` > date($p0))",
    "params": {
     "p0": "2026-08-10",
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
-   "count": 847
+   "count": 135
   },
   {
    "id": "metric_between",
@@ -901,7 +992,7 @@
     "p0": 2,
     "p1": 100,
     "p2": 300,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 1651
   },
@@ -923,7 +1014,7 @@
    "params": {
     "p0": 6,
     "p1": 2000,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 245
   },
@@ -945,7 +1036,7 @@
    "params": {
     "p0": 1,
     "p1": 1,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 138
   },
@@ -966,7 +1057,7 @@
    "predicate": "COUNT { MATCH (a)-[:`HAS_ADDON`]->(x1:`Addon`) RETURN DISTINCT x1 } >= $p0",
    "params": {
     "p0": 2,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 419
   },
@@ -986,7 +1077,7 @@
    },
    "predicate": "NOT EXISTS { MATCH (a)<-[:`OWNS`]-(:`Customer`)-[:`RAISED`]->(x1:`Ticket`) }",
    "params": {
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 2788
   },
@@ -1015,7 +1106,7 @@
    "params": {
     "p0": "POSTPAID",
     "p1": 2,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 1727
   },
@@ -1075,7 +1166,7 @@
     "p2": 10,
     "p3": 25,
     "p4": 3,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 323
   },
@@ -1097,7 +1188,7 @@
    "predicate": "COUNT { MATCH (a)-[r2:`LINKED_TO`]-(n1:`Customer`) RETURN DISTINCT n1 } >= $p0",
    "params": {
     "p0": 2,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 153
   },
@@ -1139,7 +1230,7 @@
      "Gold",
      "Platinum"
     ],
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 15
   },
@@ -1179,7 +1270,7 @@
     "p0": 2,
     "p1": 3,
     "p2": 600,
-    "as_of": "2026-08-01"
+    "as_of": "2026-09-01"
    },
    "count": 630
   }
@@ -1232,6 +1323,717 @@
    },
    "message": "field 'customer.age' is not available here; use fields of addon",
    "path": "rule.where"
+  }
+ ],
+ "analytics": [
+  {
+   "id": "prepaid_to_postpaid",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.payment_type",
+       "operator": "eq",
+       "value": "PREPAID"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "ACTIVE"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "metric",
+       "metric": "avg_revenue",
+       "window_months": 3,
+       "operator": "gte",
+       "value": 70
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "metric",
+       "metric": "avg_data_mb",
+       "window_months": 3,
+       "operator": "gte",
+       "value": 10000
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "customer.credit_class",
+       "operator": "in",
+       "value": [
+        "A",
+        "B"
+       ]
+      }
+     ]
+    }
+   },
+   "funnel": {
+    "anchor": "subscription",
+    "op": "and",
+    "base": 3366,
+    "steps": [
+     {
+      "index": 0,
+      "alone": 1968,
+      "cumulative": 1968
+     },
+     {
+      "index": 1,
+      "alone": 3000,
+      "cumulative": 1726
+     },
+     {
+      "index": 2,
+      "alone": 2462,
+      "cumulative": 986
+     },
+     {
+      "index": 3,
+      "alone": 1724,
+      "cumulative": 543
+     },
+     {
+      "index": 4,
+      "alone": 2151,
+      "cumulative": 339
+     }
+    ],
+    "final": 339
+   },
+   "trend": {
+    "metric": "avg_data_mb",
+    "display": "Avg monthly data",
+    "unit": "MB",
+    "aggregate": "avg",
+    "points": [
+     {
+      "month": "2026-04-01",
+      "segment": 26609.398230088493,
+      "base": 12928.176470588209,
+      "segment_n": 339,
+      "base_n": 3366
+     },
+     {
+      "month": "2026-05-01",
+      "segment": 29208.852507374628,
+      "base": 13418.41117052883,
+      "segment_n": 339,
+      "base_n": 3366
+     },
+     {
+      "month": "2026-06-01",
+      "segment": 30315.690265486737,
+      "base": 14040.888591800378,
+      "segment_n": 339,
+      "base_n": 3366
+     },
+     {
+      "month": "2026-07-01",
+      "segment": 31253.18584070794,
+      "base": 14238.148318042839,
+      "segment_n": 339,
+      "base_n": 3270
+     },
+     {
+      "month": "2026-08-01",
+      "segment": 33678.749262536876,
+      "base": 15185.18816199375,
+      "segment_n": 339,
+      "base_n": 3210
+     },
+     {
+      "month": "2026-09-01",
+      "segment": 33447.46607669617,
+      "base": 15714.988435592662,
+      "segment_n": 339,
+      "base_n": 3113
+     }
+    ]
+   },
+   "tickets": {
+    "metric": "ticket_count",
+    "display": "Care tickets raised",
+    "unit": null,
+    "aggregate": "count",
+    "points": [
+     {
+      "month": "2026-03-01",
+      "segment": 1.2857142857142856,
+      "base": 1.118421052631579,
+      "segment_n": 7,
+      "base_n": 76
+     },
+     {
+      "month": "2026-04-01",
+      "segment": 1.4,
+      "base": 1.2358490566037739,
+      "segment_n": 10,
+      "base_n": 106
+     },
+     {
+      "month": "2026-05-01",
+      "segment": 1.3,
+      "base": 1.0680272108843536,
+      "segment_n": 10,
+      "base_n": 147
+     },
+     {
+      "month": "2026-06-01",
+      "segment": 1.125,
+      "base": 1.0555555555555554,
+      "segment_n": 8,
+      "base_n": 108
+     },
+     {
+      "month": "2026-07-01",
+      "segment": 1.1666666666666667,
+      "base": 1.0969696969696974,
+      "segment_n": 12,
+      "base_n": 165
+     },
+     {
+      "month": "2026-08-01",
+      "segment": 1.0,
+      "base": 1.1203007518796992,
+      "segment_n": 11,
+      "base_n": 133
+     },
+     {
+      "month": "2026-09-01",
+      "segment": 1.0,
+      "base": 1.1089743589743588,
+      "segment_n": 12,
+      "base_n": 156
+     }
+    ]
+   }
+  },
+  {
+   "id": "network_detractors",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "or",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "related",
+       "entity": "ticket",
+       "where": {
+        "negate": false,
+        "label": null,
+        "kind": "group",
+        "op": "and",
+        "children": [
+         {
+          "negate": false,
+          "label": null,
+          "kind": "attribute",
+          "field": "ticket.category",
+          "operator": "eq",
+          "value": "Network"
+         },
+         {
+          "negate": false,
+          "label": null,
+          "kind": "attribute",
+          "field": "ticket.opened_at",
+          "operator": "within_last_days",
+          "value": 90
+         }
+        ]
+       },
+       "count_operator": "gte",
+       "count_value": 2
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.nps",
+       "operator": "lte",
+       "value": 4
+      }
+     ]
+    }
+   },
+   "funnel": {
+    "anchor": "subscription",
+    "op": "or",
+    "base": 3366,
+    "steps": [
+     {
+      "index": 0,
+      "alone": 17,
+      "cumulative": 17
+     },
+     {
+      "index": 1,
+      "alone": 307,
+      "cumulative": 322
+     }
+    ],
+    "final": 322
+   },
+   "trend": {
+    "metric": "avg_data_mb",
+    "display": "Avg monthly data",
+    "unit": "MB",
+    "aggregate": "avg",
+    "points": [
+     {
+      "month": "2026-04-01",
+      "segment": 12415.500000000005,
+      "base": 12928.176470588209,
+      "segment_n": 322,
+      "base_n": 3366
+     },
+     {
+      "month": "2026-05-01",
+      "segment": 13096.512422360247,
+      "base": 13418.41117052883,
+      "segment_n": 322,
+      "base_n": 3366
+     },
+     {
+      "month": "2026-06-01",
+      "segment": 13744.714285714284,
+      "base": 14040.888591800378,
+      "segment_n": 322,
+      "base_n": 3366
+     },
+     {
+      "month": "2026-07-01",
+      "segment": 13545.850162866447,
+      "base": 14238.148318042839,
+      "segment_n": 307,
+      "base_n": 3270
+     },
+     {
+      "month": "2026-08-01",
+      "segment": 15111.33222591362,
+      "base": 15185.18816199375,
+      "segment_n": 301,
+      "base_n": 3210
+     },
+     {
+      "month": "2026-09-01",
+      "segment": 15042.216494845366,
+      "base": 15714.988435592662,
+      "segment_n": 291,
+      "base_n": 3113
+     }
+    ]
+   },
+   "tickets": {
+    "metric": "ticket_count",
+    "display": "Care tickets raised",
+    "unit": null,
+    "aggregate": "count",
+    "points": [
+     {
+      "month": "2026-03-01",
+      "segment": 1.1428571428571428,
+      "base": 1.118421052631579,
+      "segment_n": 7,
+      "base_n": 76
+     },
+     {
+      "month": "2026-04-01",
+      "segment": 1.375,
+      "base": 1.2358490566037739,
+      "segment_n": 8,
+      "base_n": 106
+     },
+     {
+      "month": "2026-05-01",
+      "segment": 1.2352941176470589,
+      "base": 1.0680272108843536,
+      "segment_n": 17,
+      "base_n": 147
+     },
+     {
+      "month": "2026-06-01",
+      "segment": 1.0416666666666667,
+      "base": 1.0555555555555554,
+      "segment_n": 24,
+      "base_n": 108
+     },
+     {
+      "month": "2026-07-01",
+      "segment": 1.1290322580645158,
+      "base": 1.0969696969696974,
+      "segment_n": 31,
+      "base_n": 165
+     },
+     {
+      "month": "2026-08-01",
+      "segment": 1.2222222222222223,
+      "base": 1.1203007518796992,
+      "segment_n": 27,
+      "base_n": 133
+     },
+     {
+      "month": "2026-09-01",
+      "segment": 1.0,
+      "base": 1.1089743589743588,
+      "segment_n": 29,
+      "base_n": 156
+     }
+    ]
+   }
+  },
+  {
+   "id": "household_fmc",
+   "definition": {
+    "anchor": "customer",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "customer.household_size",
+       "operator": "gte",
+       "value": 3
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "related",
+       "entity": "subscription",
+       "where": {
+        "negate": false,
+        "label": null,
+        "kind": "attribute",
+        "field": "subscription.status",
+        "operator": "eq",
+        "value": "ACTIVE"
+       },
+       "count_operator": "gte",
+       "count_value": 1
+      }
+     ]
+    }
+   },
+   "funnel": {
+    "anchor": "customer",
+    "op": "and",
+    "base": 2000,
+    "steps": [
+     {
+      "index": 0,
+      "alone": 457,
+      "cumulative": 457
+     },
+     {
+      "index": 1,
+      "alone": 1863,
+      "cumulative": 418
+     }
+    ],
+    "final": 418
+   },
+   "trend": {
+    "metric": "total_revenue",
+    "display": "Total revenue",
+    "unit": "SAR",
+    "aggregate": "sum",
+    "points": [
+     {
+      "month": "2026-04-01",
+      "segment": 237.9155263157894,
+      "base": 226.43108499999997,
+      "segment_n": 418,
+      "base_n": 2000
+     },
+     {
+      "month": "2026-05-01",
+      "segment": 240.88014354066982,
+      "base": 226.67917500000004,
+      "segment_n": 418,
+      "base_n": 2000
+     },
+     {
+      "month": "2026-06-01",
+      "segment": 237.17313397129186,
+      "base": 228.1839100000005,
+      "segment_n": 418,
+      "base_n": 2000
+     },
+     {
+      "month": "2026-07-01",
+      "segment": 237.37820574162672,
+      "base": 225.47849008642584,
+      "segment_n": 418,
+      "base_n": 1967
+     },
+     {
+      "month": "2026-08-01",
+      "segment": 234.30555023923455,
+      "base": 223.14442673521836,
+      "segment_n": 418,
+      "base_n": 1945
+     },
+     {
+      "month": "2026-09-01",
+      "segment": 230.1997129186604,
+      "base": 222.39833683105977,
+      "segment_n": 418,
+      "base_n": 1906
+     }
+    ]
+   },
+   "tickets": {
+    "metric": "ticket_count",
+    "display": "Care tickets raised",
+    "unit": null,
+    "aggregate": "count",
+    "points": [
+     {
+      "month": "2026-03-01",
+      "segment": 1.3333333333333333,
+      "base": 1.090909090909091,
+      "segment_n": 6,
+      "base_n": 44
+     },
+     {
+      "month": "2026-04-01",
+      "segment": 1.25,
+      "base": 1.191489361702128,
+      "segment_n": 8,
+      "base_n": 47
+     },
+     {
+      "month": "2026-05-01",
+      "segment": 1.0,
+      "base": 1.0657894736842104,
+      "segment_n": 16,
+      "base_n": 76
+     },
+     {
+      "month": "2026-06-01",
+      "segment": 1.1333333333333335,
+      "base": 1.0508474576271187,
+      "segment_n": 15,
+      "base_n": 59
+     },
+     {
+      "month": "2026-07-01",
+      "segment": 1.0476190476190477,
+      "base": 1.064102564102564,
+      "segment_n": 21,
+      "base_n": 78
+     },
+     {
+      "month": "2026-08-01",
+      "segment": 1.0,
+      "base": 1.126760563380282,
+      "segment_n": 13,
+      "base_n": 71
+     },
+     {
+      "month": "2026-09-01",
+      "segment": 1.142857142857143,
+      "base": 1.111111111111111,
+      "segment_n": 14,
+      "base_n": 81
+     }
+    ]
+   }
+  },
+  {
+   "id": "influencers_in_churning_communities",
+   "definition": {
+    "anchor": "subscription",
+    "rule": {
+     "negate": false,
+     "label": null,
+     "kind": "group",
+     "op": "and",
+     "children": [
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.status",
+       "operator": "eq",
+       "value": "ACTIVE"
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.influence_score",
+       "operator": "gte",
+       "value": 90
+      },
+      {
+       "negate": false,
+       "label": null,
+       "kind": "attribute",
+       "field": "subscription.community_churn_rate",
+       "operator": "gte",
+       "value": 0.15
+      }
+     ]
+    }
+   },
+   "funnel": {
+    "anchor": "subscription",
+    "op": "and",
+    "base": 3366,
+    "steps": [
+     {
+      "index": 0,
+      "alone": 3000,
+      "cumulative": 3000
+     },
+     {
+      "index": 1,
+      "alone": 354,
+      "cumulative": 317
+     },
+     {
+      "index": 2,
+      "alone": 539,
+      "cumulative": 31
+     }
+    ],
+    "final": 31
+   },
+   "trend": {
+    "metric": "avg_data_mb",
+    "display": "Avg monthly data",
+    "unit": "MB",
+    "aggregate": "avg",
+    "points": [
+     {
+      "month": "2026-04-01",
+      "segment": 17022.645161290322,
+      "base": 12928.176470588209,
+      "segment_n": 31,
+      "base_n": 3366
+     },
+     {
+      "month": "2026-05-01",
+      "segment": 18604.677419354834,
+      "base": 13418.41117052883,
+      "segment_n": 31,
+      "base_n": 3366
+     },
+     {
+      "month": "2026-06-01",
+      "segment": 18018.93548387097,
+      "base": 14040.888591800378,
+      "segment_n": 31,
+      "base_n": 3366
+     },
+     {
+      "month": "2026-07-01",
+      "segment": 22888.32258064516,
+      "base": 14238.148318042839,
+      "segment_n": 31,
+      "base_n": 3270
+     },
+     {
+      "month": "2026-08-01",
+      "segment": 20531.322580645163,
+      "base": 15185.18816199375,
+      "segment_n": 31,
+      "base_n": 3210
+     },
+     {
+      "month": "2026-09-01",
+      "segment": 19689.419354838712,
+      "base": 15714.988435592662,
+      "segment_n": 31,
+      "base_n": 3113
+     }
+    ]
+   },
+   "tickets": {
+    "metric": "ticket_count",
+    "display": "Care tickets raised",
+    "unit": null,
+    "aggregate": "count",
+    "points": [
+     {
+      "month": "2026-03-01",
+      "segment": null,
+      "base": 1.118421052631579,
+      "segment_n": 0,
+      "base_n": 76
+     },
+     {
+      "month": "2026-04-01",
+      "segment": 1.0,
+      "base": 1.2358490566037739,
+      "segment_n": 2,
+      "base_n": 106
+     },
+     {
+      "month": "2026-05-01",
+      "segment": 1.5,
+      "base": 1.0680272108843536,
+      "segment_n": 2,
+      "base_n": 147
+     },
+     {
+      "month": "2026-06-01",
+      "segment": 1.0,
+      "base": 1.0555555555555554,
+      "segment_n": 3,
+      "base_n": 108
+     },
+     {
+      "month": "2026-07-01",
+      "segment": 1.5,
+      "base": 1.0969696969696974,
+      "segment_n": 2,
+      "base_n": 165
+     },
+     {
+      "month": "2026-08-01",
+      "segment": 1.0,
+      "base": 1.1203007518796992,
+      "segment_n": 2,
+      "base_n": 133
+     },
+     {
+      "month": "2026-09-01",
+      "segment": 1.25,
+      "base": 1.1089743589743588,
+      "segment_n": 4,
+      "base_n": 156
+     }
+    ]
+   }
   }
  ]
 }

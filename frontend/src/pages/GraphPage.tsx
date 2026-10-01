@@ -23,7 +23,12 @@ interface Pan { pointerId: number; start: [number, number]; origin: [number, num
 interface LinkDraft { a: string; b: string; type: string; at: [number, number] }
 
 const RADIUS: Record<string, number> = { Customer: 20, Subscription: 14 };
-const radius = (label: string) => RADIUS[label] ?? 10;
+const baseRadius = (label: string) => RADIUS[label] ?? 10;
+/** With the influence lens on, a line's size grows with its call-graph influence (0-100). */
+const nodeRadius = (n: GraphNode, influence: boolean) => {
+  const score = n.props.influence_score;
+  return influence && n.label === "Subscription" && typeof score === "number" ? 8 + (score / 100) * 18 : baseRadius(n.label);
+};
 const LABEL_ORDER = ["Customer", "Subscription", "Plan", "Device", "Addon", "City", "Ticket", "MonthlyUsage"];
 const DROP_DISTANCE = 34;
 
@@ -58,6 +63,7 @@ export function GraphPage() {
   const [groupType, setGroupType] = useState(linkTypes[0] ?? "");
   const [status, setStatus] = useState<{ text: string; error?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [influence, setInfluence] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GraphNode[]>([]);
   const [member, setMember] = useState<{ anchor: string; key: string } | null>(null);
@@ -75,7 +81,7 @@ export function GraphPage() {
       .force("link", forceLink<SimNode, SimLink>([]).id((d) => d.id)
         .distance((l) => (l.type === linkNet?.rel ? 150 : 80)).strength((l) => (l.type === linkNet?.rel ? 0.4 : 0.8)))
       .force("charge", forceManyBody<SimNode>().strength((d) => (d.label === accountLabel ? -520 : -220)))
-      .force("collide", forceCollide<SimNode>((d) => radius(d.label) + 14))
+      .force("collide", forceCollide<SimNode>((d) => nodeRadius(d, true) + 14))
       .force("center", forceCenter(0, 0).strength(0.03))
       .on("tick", redraw);
     sim.current = s;
@@ -181,7 +187,7 @@ export function GraphPage() {
       n.fx = gx; n.fy = gy;
       let target: string | null = null;
       if (isAccount(d.id)) {
-        let best = DROP_DISTANCE / viewRef.current.k + radius(n.label);
+        let best = DROP_DISTANCE / viewRef.current.k + baseRadius(n.label);
         for (const other of nodes.current.values()) {
           if (other.id === d.id || other.label !== accountLabel) continue;
           const dist = Math.hypot((other.x ?? 0) - gx, (other.y ?? 0) - gy);
@@ -496,6 +502,8 @@ export function GraphPage() {
             {linkNet && <span><i className="line-swatch" aria-hidden /> {linkNet.display}</span>}
           </div>
           <div className="btn-row">
+            <button type="button" className={`btn btn-sm${influence ? " on" : ""}`} aria-pressed={influence}
+              title="Size lines by call-graph influence" onClick={() => setInfluence(!influence)}>Influence</button>
             <button type="button" className="btn btn-sm" onClick={fit}>Fit</button>
             <button type="button" className="btn btn-sm" onClick={() => setView((v) => ({ ...v, k: Math.min(3, v.k * 1.25) }))} aria-label="Zoom in">+</button>
             <button type="button" className="btn btn-sm" onClick={() => setView((v) => ({ ...v, k: Math.max(0.2, v.k / 1.25) }))} aria-label="Zoom out">−</button>
@@ -531,7 +539,7 @@ export function GraphPage() {
               return <line className="drop-preview" x1={a.x} y1={a.y} x2={b.x} y2={b.y} />;
             })()}
             {nodeList.map((n) => {
-              const r = radius(n.label);
+              const r = nodeRadius(n, influence);
               const hidden = n.degree !== undefined ? n.degree - linkList.filter((l) => endId(l.source) === n.id || endId(l.target) === n.id).length : 0;
               const cls = [
                 "node", `node-${n.label}`,

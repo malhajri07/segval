@@ -112,6 +112,18 @@ class BreakdownRequest(BaseModel):
     field: str
 
 
+class FunnelRequest(BaseModel):
+    definition: SegmentDefinition | None = None
+    segment_id: str | None = None
+
+
+class TrendRequest(BaseModel):
+    definition: SegmentDefinition | None = None
+    segment_id: str | None = None
+    metric: str
+    months: int = Field(default=6, ge=1, le=24)
+
+
 class OverlapRequest(BaseModel):
     segment_ids: list[str] = Field(min_length=1, max_length=12)
 
@@ -222,16 +234,19 @@ def _register_routes(app: FastAPI, settings: Settings) -> None:
     @app.get("/api/segments/{segment_id}/members")
     def members(segment_id: str, limit: int = Query(100, ge=1, le=5000),
                 skip: int = Query(0, ge=0), fields: list[str] | None = Query(None),
+                group: str | None = Query(None, pattern="^(target|control)$"),
                 c: Container = C):
         try:
-            return c.segments.members(segment_id, limit, skip, fields)
+            return c.segments.members(segment_id, limit, skip, fields, group)
         except KeyError as exc:
             raise HTTPException(400, str(exc)) from None
 
     @app.get("/api/segments/{segment_id}/export.csv", response_class=PlainTextResponse)
-    def export_csv(segment_id: str, fields: list[str] | None = Query(None), c: Container = C):
+    def export_csv(segment_id: str, fields: list[str] | None = Query(None),
+                   group: str = Query("target", pattern="^(target|control|all)$"),
+                   c: Container = C):
         seg = c.segments.get(segment_id)
-        body = c.segments.export_csv(segment_id, fields)
+        body = c.segments.export_csv(segment_id, fields, group=None if group == "all" else group)
         filename = "".join(ch if ch.isalnum() else "_" for ch in seg.name).strip("_") or "segment"
         return PlainTextResponse(
             body, media_type="text/csv",
@@ -252,6 +267,24 @@ def _register_routes(app: FastAPI, settings: Settings) -> None:
     def breakdown(req: BreakdownRequest, c: Container = C):
         try:
             return c.insights.breakdown(req.field, req.definition, req.segment_id)
+        except (KeyError, ValueError) as exc:
+            if isinstance(exc, CompileError):
+                raise
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/insights/funnel")
+    def funnel(req: FunnelRequest, c: Container = C):
+        try:
+            return c.insights.funnel(req.definition, req.segment_id)
+        except (KeyError, ValueError) as exc:
+            if isinstance(exc, CompileError):
+                raise
+            raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/insights/trend")
+    def trend(req: TrendRequest, c: Container = C):
+        try:
+            return c.insights.trend(req.metric, req.definition, req.segment_id, req.months)
         except (KeyError, ValueError) as exc:
             if isinstance(exc, CompileError):
                 raise
@@ -311,6 +344,12 @@ def _register_routes(app: FastAPI, settings: Settings) -> None:
         @app.post("/api/admin/schema")
         def admin_schema(c: Container = C):
             return {"statements": apply_schema(c.client)}
+
+        @app.post("/api/admin/graph-features")
+        def admin_graph_features(c: Container = C):
+            from segval.graph.features import refresh_features
+
+            return refresh_features(c.client)
 
         @app.post("/api/admin/seed")
         def admin_seed(req: SeedRequest, c: Container = C):

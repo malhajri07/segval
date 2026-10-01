@@ -31,9 +31,12 @@ anchors:
       - customer.nationality_group
       - city.region
       - subscription.tenure_months
+      - subscription.influence_score
+      - subscription.community_churn_rate
     kpis:
       - { id: arpu, display: ARPU (3m avg), field: subscription.arpu_3m, unit: SAR }
       - { id: churn, display: Churn score, field: subscription.churn_score }
+      - { id: community_churn, display: Community churn rate, field: subscription.community_churn_rate }
       - { id: data, display: Avg monthly data, metric: avg_data_mb, window_months: 3, unit: MB }
       - { id: voice, display: Avg monthly voice, metric: avg_voice_min, window_months: 3, unit: min }
       - { id: roaming, display: Roaming data (6m), metric: total_roaming_mb, window_months: 6, unit: MB }
@@ -56,6 +59,7 @@ anchors:
       - customer.credit_class
       - city.region
       - customer.digital_app_user
+      - customer.household_size
     kpis:
       - { id: lines, display: Lines, metric: line_count, unit: lines }
       - { id: revenue, display: Revenue (3m), metric: total_revenue, window_months: 3, unit: SAR }
@@ -108,6 +112,25 @@ entities:
         buckets: [0.2, 0.4, 0.6, 0.8]
       - { id: last_recharge_date, property: last_recharge_date, type: date, display: Last recharge date }
       - { id: nps, property: nps, type: number, display: NPS response, buckets: [7, 9] }
+      - id: influence_score
+        property: influence_score
+        type: number
+        display: Social influence
+        description: Call-graph PageRank as a percentile (100 = most central line). Computed by the graph features job.
+        buckets: [50, 75, 90, 97]
+      - { id: community_id, property: community_id, type: number, display: Calling community ID }
+      - id: community_size
+        property: community_size
+        type: number
+        display: Calling community size
+        description: Lines in the same call-graph community (Louvain).
+        buckets: [5, 10, 20, 40]
+      - id: community_churn_rate
+        property: community_churn_rate
+        type: number
+        display: Community churn rate
+        description: Share of the other lines in the same calling community that have churned.
+        buckets: [0.05, 0.1, 0.2, 0.3]
 
   - id: customer
     label: Customer
@@ -143,6 +166,12 @@ entities:
         values: [A, B, C, D]
       - { id: tenure_months, property: tenure_months, type: number, display: Customer tenure, unit: months, buckets: [12, 36, 60, 120] }
       - { id: digital_app_user, property: digital_app_user, type: boolean, display: Uses self-care app }
+      - id: household_size
+        property: household_size
+        type: number
+        display: Household size
+        description: Accounts in the same household or family cluster of account links, including this one.
+        buckets: [2, 3, 4]
       - id: preferred_language
         property: preferred_language
         type: enum

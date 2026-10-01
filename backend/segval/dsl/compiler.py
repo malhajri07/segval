@@ -149,13 +149,14 @@ class Compiler:
 
     # ---- public API ------------------------------------------------------
     def compile(
-        self, definition: SegmentDefinition, as_of: date | str | None = None, var: str = "a"
+        self, definition: SegmentDefinition, as_of: date | str | None = None, var: str = "a",
+        param_prefix: str = "p",
     ) -> CompiledPredicate:
         anchor = self.catalog.anchor(definition.anchor)
         if anchor is None:
             raise CompileError(f"unknown anchor {definition.anchor!r}", "anchor")
         anchor_entity = self.catalog.anchor_entity(anchor.id)
-        state = _State(self.catalog)
+        state = _State(self.catalog, params=_Params(prefix=param_prefix))
         scope = _Scope(anchor=anchor.id, var=var, bound={anchor_entity.id: var})
         predicate = self._node(definition.rule, scope, state, "rule")
         params = dict(state.params.values)

@@ -15,6 +15,8 @@ from segval.graph.client import Neo4jClient
 from segval.seed.generator import generate
 from segval.seed.loader import load_dataset
 from segval.services import queries
+from segval.services.insights import InsightsService
+from segval.services.segments import DataClock, SegmentService
 from segval.templates.loader import load_templates
 
 client = Neo4jClient(get_settings())
@@ -72,6 +74,18 @@ for cid, rule in [("bad_op", A("plan.category", "gt", 1)), ("bad_enum", A("plan.
         comp.compile(SegmentDefinition.model_validate({"rule": rule}), as_of=ds.as_of)
     except CompileError as e:
         errors.append({"id": cid, "rule": rule, "message": e.message, "path": e.path})
-json.dump({"as_of": ds.as_of.isoformat(), "cases": out, "errors": errors},
+segs = SegmentService(load_catalog(), client, DataClock(client))
+insights = InsightsService(load_catalog(), client, segs)
+by_id = {c["id"]: c["definition"] for c in out}
+analytics = []
+for cid in ["prepaid_to_postpaid", "network_detractors", "household_fmc", "influencers_in_churning_communities"]:
+    d = SegmentDefinition.model_validate(by_id[cid])
+    analytics.append({
+        "id": cid, "definition": by_id[cid],
+        "funnel": insights.funnel(d),
+        "trend": insights.trend("avg_data_mb" if d.anchor == "subscription" else "total_revenue", d),
+        "tickets": insights.trend("ticket_count", d),
+    })
+json.dump({"as_of": ds.as_of.isoformat(), "cases": out, "errors": errors, "analytics": analytics},
           open("../frontend/src/demo/parity.fixture.json", "w"), indent=1)
 print(len(out), "cases:", " ".join(f"{c['id']}={c['count']}" for c in out))

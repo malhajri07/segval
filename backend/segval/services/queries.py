@@ -46,21 +46,25 @@ def row_projection(catalog: Catalog, anchor: str, var: str, fields: list[str]) -
 
 def members_query(
     cp: CompiledPredicate, catalog: Catalog, fields: list[str], limit: int, skip: int = 0,
-    materialized_segment_id: str | None = None,
+    materialized_segment_id: str | None = None, group: str | None = None,
 ) -> CypherQuery:
     params = dict(cp.params)
     params.update({"limit": limit, "skip": skip})
     key = catalog.anchor_entity(cp.anchor).key
     if materialized_segment_id:
         params["segment_id"] = materialized_segment_id
+        params["group"] = group
         head = (
-            f"MATCH ({cp.var}:{q(cp.label)})-[:`MEMBER_OF`]->(:`Segment` {{id: $segment_id}})"
+            f"MATCH ({cp.var}:{q(cp.label)})-[m:`MEMBER_OF`]->(:`Segment` {{id: $segment_id}})\n"
+            "WHERE $group IS NULL OR coalesce(m.group, 'target') = $group"
         )
+        grp = "coalesce(m.group, 'target')"
     else:
         head = f"{anchor_match(cp)}\nWHERE {cp.predicate}"
+        grp = "null"
     return CypherQuery(
-        f"{head}\nWITH {cp.var} ORDER BY {cp.var}.{q(key)} SKIP $skip LIMIT $limit\n"
-        f"RETURN {row_projection(catalog, cp.anchor, cp.var, fields)} AS row",
+        f"{head}\nWITH {cp.var}, {grp} AS grp ORDER BY {cp.var}.{q(key)} SKIP $skip LIMIT $limit\n"
+        f"RETURN {row_projection(catalog, cp.anchor, cp.var, fields)} AS row, grp AS group",
         params,
     )
 

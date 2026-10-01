@@ -81,6 +81,22 @@ export function SegmentPage() {
               : s.is_stale ? `⚠ Rules changed since last materialization (v${s.materialized_version}). Refresh members.`
               : `✓ ${s.member_count.toLocaleString()} members materialized ${new Date(s.materialized_at!).toLocaleString()} (data as of ${s.materialized_as_of})`}
           </div>
+          {s.member_count !== null && (s.control_count ?? 0) > 0 && (
+            <div className="holdout-split" aria-label="Target and control groups">
+              <div className="split-bar">
+                <span className="split-target" style={{ width: `${((s.target_count ?? 0) / s.member_count) * 100}%` }} />
+                <span className="split-control" style={{ width: `${((s.control_count ?? 0) / s.member_count) * 100}%` }} />
+              </div>
+              <div className="small">
+                <strong>{(s.target_count ?? 0).toLocaleString()}</strong> to contact ·{" "}
+                <strong>{(s.control_count ?? 0).toLocaleString()}</strong> held out as control ({s.materialized_holdout_pct}%).
+                <span className="muted"> Exports include only the contact group; compare both groups after the campaign to measure lift.</span>
+              </div>
+            </div>
+          )}
+          {s.member_count === null && s.holdout_pct > 0 && (
+            <div className="small muted">Materialize to split off the {s.holdout_pct}% control group.</div>
+          )}
           {s.depends_on.length > 0 && (
             <div className="small">Depends on: {s.depends_on.map((d) => <Link key={d} to={`/segments/${d}`} className="chip">{names[d] ?? d}</Link>)}</div>
           )}
@@ -92,7 +108,7 @@ export function SegmentPage() {
       </div>
 
       <h2>Insights</h2>
-      {profile.data ? <ProfileView profile={profile.data} />
+      {profile.data ? <ProfileView profile={profile.data} definition={s.definition} segmentId={s.id} segmentNames={names} wide />
         : profile.error ? <p className="error">{profile.error.message}</p> : <p className="muted">Profiling…</p>}
 
       <h2>Members <span className="muted small">({members.data?.source ?? "…"})</span></h2>

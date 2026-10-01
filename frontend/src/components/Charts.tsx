@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { Dimension, Kpi, Profile } from "../api/types";
+import type { Dimension, Kpi, Profile, SegmentDefinition } from "../api/types";
+import { DriversChart, FunnelChart, TrendChart } from "./InsightCharts";
 import { fmtCompact, fmtNumber, fmtPct } from "../lib/rules";
 
 /** Share of base: a single-series meter with the value as text beside it. */
@@ -31,7 +32,7 @@ export function KpiTiles({ kpis }: { kpis: Kpi[] }) {
             <div className="kpi-foot muted small">
               base {fmtCompact(k.base)}
               {lift !== null && (
-                <span className={`lift lift-${dir}`}>
+                <span className={`lift lift-${dir}`} title="Segment average divided by base average">
                   {dir === "up" ? "▲" : dir === "down" ? "▼" : "●"} {lift.toFixed(2)}×
                 </span>
               )}
@@ -106,10 +107,20 @@ export function DimensionChart({ dim }: { dim: Dimension }) {
   );
 }
 
-export function ProfileView({ profile }: { profile: Profile }) {
+export function ProfileView({ profile, definition, segmentId, segmentNames, wide = false }: {
+  profile: Profile; definition?: SegmentDefinition; segmentId?: string;
+  segmentNames?: Record<string, string>; wide?: boolean;
+}) {
+  const source = { definition, segmentId };
   return (
     <div className="profile">
       <KpiTiles kpis={profile.kpis} />
+      <div className={`insight-grid${wide ? " wide" : ""}`}>
+        {definition && <FunnelChart source={source} segmentNames={segmentNames} />}
+        {definition && <TrendChart source={source} />}
+        <DriversChart profile={profile} rule={definition?.rule} />
+      </div>
+      <h3 className="dims-title">Profile by dimension</h3>
       <div className="legend small" aria-hidden>
         <span><i className="sw sw-seg" /> Segment share</span>
         <span><i className="sw sw-base" /> Base share</span>

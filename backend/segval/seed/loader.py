@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from segval.graph.client import GraphClient, apply_schema
+from segval.graph.features import refresh_features
 from segval.seed.generator import ADDONS, CITIES, DEVICES, PLANS, Dataset
 
 BATCH = 2000
@@ -142,4 +143,6 @@ def load_dataset(
             "MERGE (a)-[l:LINKED_TO]-(b) SET l.link_type = r.link_type, l.source = 'data'",
             {"rows": rows},
         )
-    return ds.summary()
+    summary = ds.summary()
+    summary.update(refresh_features(client, say))
+    return summary

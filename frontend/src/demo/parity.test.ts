@@ -42,3 +42,28 @@ describe("parity with the Python compiler and Neo4j", () => {
     });
   }
 });
+
+describe("analytics parity (funnel and trend) with the backend", async () => {
+  const { DemoService } = await import("./service");
+  const svc = new DemoService(data as unknown as Snapshot);
+  for (const a of fixture.analytics) {
+    it(`${a.id}: funnel matches`, () => {
+      expect(svc.funnel({ definition: a.definition as SegmentDefinition })).toEqual(a.funnel);
+    });
+    for (const [name, expected] of [["trend", a.trend], ["tickets", a.tickets]] as const) {
+      it(`${a.id}: ${name} matches`, () => {
+        const got = svc.trend({ definition: a.definition as SegmentDefinition, metric: expected.metric });
+        expect(got.points.map((p) => p.month)).toEqual(expected.points.map((p) => p.month));
+        got.points.forEach((p, i) => {
+          const e = expected.points[i];
+          expect(p.segment_n).toBe(e.segment_n);
+          expect(p.base_n).toBe(e.base_n);
+          for (const k of ["segment", "base"] as const) {
+            if (e[k] === null) expect(p[k]).toBeNull();
+            else expect(p[k]).toBeCloseTo(e[k] as number, 6);
+          }
+        });
+      });
+    }
+  }
+});

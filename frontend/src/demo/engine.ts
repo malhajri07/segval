@@ -203,6 +203,8 @@ export interface CompiledPredicate {
   test: (node: GNode) => boolean;
 }
 
+export function plusDays(isoDate: string, days: number): string { return minusDays(isoDate, -days); }
+
 export class Compiler {
   constructor(private catalog: Catalog, private ctx: EvalContext) {}
 
@@ -215,11 +217,11 @@ export class Compiler {
     return this.entity(entityId)?.paths[anchor];
   }
 
-  compile(def: SegmentDefinition): CompiledPredicate {
+  compile(def: SegmentDefinition, paramPrefix = "p"): CompiledPredicate {
     const anchor = this.catalog.anchors.find((a) => a.id === def.anchor);
     if (!anchor) throw new CompileError(`unknown anchor ${pyRepr(def.anchor)}`, "anchor");
     const ent = this.anchorEntity(anchor.id);
-    const st = new State();
+    const st = new State(paramPrefix);
     const c = this.node(def.rule, { anchor: anchor.id, v: "a", bound: { [ent.id]: "a" }, restricted: false, depth: 0 }, st, "rule");
     return {
       anchor: anchor.id, label: ent.label, predicate: c.expr,

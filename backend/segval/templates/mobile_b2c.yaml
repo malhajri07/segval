@@ -194,3 +194,34 @@
         kind: related
         entity: subscription
         where: { kind: attribute, field: subscription.status, operator: eq, value: CHURNED }
+
+- id: influencers_in_churning_communities
+  name: Influencers in churning communities
+  category: Retention
+  description: >-
+    Top-decile central lines whose calling community is already losing members.
+    Retain them first: their departure would pull others with them.
+  definition:
+    anchor: subscription
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }
+        - { kind: attribute, field: subscription.influence_score, operator: gte, value: 90 }
+        - { kind: attribute, field: subscription.community_churn_rate, operator: gte, value: 0.15 }
+
+- id: household_fmc
+  name: Multi-account households for convergence
+  category: Convergence
+  description: Customers in households of three or more accounts, ready for a shared family or home bundle.
+  definition:
+    anchor: customer
+    rule:
+      kind: group
+      op: and
+      children:
+        - { kind: attribute, field: customer.household_size, operator: gte, value: 3 }
+        - kind: related
+          entity: subscription
+          where: { kind: attribute, field: subscription.status, operator: eq, value: ACTIVE }

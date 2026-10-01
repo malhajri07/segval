@@ -151,3 +151,52 @@ def test_graph_workspace_linking(services, neo4j_client, catalog):
     assert graph.unlink_accounts("C0000003", "C0000001") == 1
     with pytest.raises(NotFound):
         graph.unlink_accounts("C0000003", "C0000001")
+
+
+def test_graph_features_written(services, neo4j_client):
+    row = neo4j_client.read(
+        "MATCH (s:Subscription) RETURN count(s.influence_score) AS scored, count(*) AS n, "
+        "max(s.influence_score) AS top, min(s.influence_score) AS low")[0]
+    assert row["scored"] == row["n"] and row["top"] == 100 and row["low"] == 0
+    hh = neo4j_client.read(
+        "MATCH (c:Customer) RETURN min(c.household_size) AS m, count(c.household_size) AS n")[0]
+    assert hh["m"] == 1 and hh["n"] > 0
+
+
+def test_funnel_matches_preview_and_trend_shape(services):
+    segs, insights, ds = services
+    t = next(t for t in load_templates("mobile_b2c") if t.id == "prepaid_to_postpaid")
+    funnel = insights.funnel(t.definition)
+    assert funnel["final"] == segs.preview(t.definition, 0)["segment_size"]
+    cums = [s["cumulative"] for s in funnel["steps"]]
+    assert cums == sorted(cums, reverse=True)
+    assert all(s["alone"] >= s["cumulative"] for s in funnel["steps"])
+
+    trend = insights.trend("avg_data_mb", t.definition)
+    assert [p["month"] for p in trend["points"]] == sorted(p["month"] for p in trend["points"])
+    assert len(trend["points"]) == 6 and trend["points"][-1]["month"] == ds.as_of.isoformat()
+    with pytest.raises(ValueError):
+        insights.trend("line_count", t.definition)
+
+
+def test_holdout_control_group(services):
+    segs, _, _ = services
+    seg = segs.create(SegmentIn(name="Holdout test", holdout_pct=20,
+                                definition=SegmentDefinition(anchor="subscription")))
+    seg = segs.materialize(seg.id)
+    assert seg.control_count + seg.target_count == seg.member_count
+    assert 0.12 < seg.control_count / seg.member_count < 0.28
+    first = {r["subscription.msisdn"] for r in segs.members(seg.id, 5000, group="control")["rows"]}
+    assert segs.materialize(seg.id).control_count == len(first)
+    again = {r["subscription.msisdn"] for r in segs.members(seg.id, 5000, group="control")["rows"]}
+    assert first == again  # refreshing never reshuffles the control group
+
+    csv_rows = segs.export_csv(seg.id).strip().splitlines()
+    assert len(csv_rows) - 1 == seg.target_count
+    assert not any(k in "\n".join(csv_rows) for k in list(first)[:20])
+
+    upd = segs.update(seg.id, SegmentIn(name="Holdout test", holdout_pct=0,
+                                        definition=SegmentDefinition(anchor="subscription")))
+    assert upd.is_stale  # holdout changed since materialization
+    assert segs.materialize(seg.id).control_count == 0
+    segs.delete(seg.id)

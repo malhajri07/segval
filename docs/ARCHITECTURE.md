@@ -108,7 +108,34 @@ against `$as_of`, the latest month loaded into the graph, not the wall clock.
 * **Templates**: 11 ready-made B2C segments (retention, churn contagion,
   influencers, 5G upsell, roaming cross-sell…).
 
-## 5. Scaling notes
+## 5. Graph intelligence
+
+`segval/graph/features.py` turns graph structure into attributes business users can
+filter on. It runs after every data load (`POST /api/admin/graph-features` re-runs it):
+
+| Attribute | Algorithm |
+|---|---|
+| `Subscription.influence_score` | Weighted PageRank on `CALLED` (calls as weights, damping 0.85), as a 0–100 percentile |
+| `Subscription.community_id` / `community_size` | Recursive Louvain: Louvain, then Louvain again inside any community over 40 lines (default Louvain merges calling circles into city-sized blobs) |
+| `Subscription.community_churn_rate` | Share of the *other* lines in the community that churned (excluding the line's own label) |
+| `Customer.household_size` | Connected components over Household/Family `LINKED_TO` links |
+
+`compute_features` is a pure function over sorted edge lists, and it runs Louvain on
+integer node labels. Python's string hashing is randomised per process, so set
+iteration over string IDs would otherwise change the communities from run to run.
+The Neo4j job and the offline demo export therefore produce identical values, and a
+test checks this across `PYTHONHASHSEED` values. On the synthetic data, lines in
+communities with ≥15% churn churn at about 25%, against about 5% elsewhere.
+
+## 6. Control groups
+
+Each segment has a `holdout_pct` of 0–50%. Materializing tags every `MEMBER_OF`
+edge with `group: target|control`. A member is in control when
+`FNV-1a("segment_id:member_key") mod 10000 < holdout_pct × 100`. That is deterministic,
+so refreshes never reshuffle the groups, and the demo's TypeScript port assigns the
+same members. CSV export defaults to the target group only.
+
+## 7. Scaling notes
 
 * Predicates run once per anchor node. With indexes on the most selective
   anchor properties (payment type, status) Neo4j prunes early. For bases of tens
@@ -120,7 +147,7 @@ against `$as_of`, the latest month loaded into the graph, not the wall clock.
 * Materialization uses `CALL {} IN TRANSACTIONS` batches, so it is safe for
   millions of members.
 
-## 6. Roadmap to the full platform
+## 8. Roadmap to the full platform
 
 The current MVP (≈6K lines) is the core that everything else plugs into. A
 realistic path to the full platform (≈100K lines) is to grow in modules, each
@@ -136,7 +163,10 @@ shippable on its own:
 | 6 | **Scheduling & activation** | Scheduled refresh, segment history/trends, push to CRM/campaign tools (CSV/SFTP, REST, Kafka), control groups. |
 | 7 | **Advanced analytics** | Segment trend over time, Sankey of segment migration between refreshes, uplift of campaigns vs. control. |
 | 8 | **Natural-language builder** | "Postpaid customers in Riyadh with a 5G phone but no unlimited plan" → rule tree (LLM constrained by the catalog; output always reviewed in the visual builder). |
-| 9 | **Catalog admin UI** | Let data stewards add attributes/metrics without editing YAML; catalog versioning. |
+| 9 | **Consent & purpose governance** | Data-usage labels on catalog fields, inherited by segments; activation blocked on policy violations (Saudi PDPL opt-in, no location data for marketing). See RESEARCH.md. |
+| 10 | **Account-match suggestions** | Rules + graph similarity propose `LINKED_TO` candidates with confidence; stewards accept/reject with merge/split history. |
+| 11 | **Recency-aware contagion** | Churn dates per line, "neighbours who churned in the last N weeks, outgoing, minutes-weighted" (Haenlein 2013). |
+| 12 | **Catalog admin UI** | Let data stewards add attributes/metrics without editing YAML; catalog versioning. |
 
 Each module reuses the same catalog → DSL → Cypher core, which keeps the growth
 consistent instead of turning it into 100K lines of one-off queries.

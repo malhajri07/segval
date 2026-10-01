@@ -6,7 +6,7 @@ from typing import Any
 
 from segval.catalog.model import Catalog
 from segval.dsl.compiler import CompiledPredicate, hop_pattern, q
-from segval.dsl.model import SegmentDefinition
+from segval.dsl.model import Group, SegmentDefinition
 from segval.graph.client import GraphClient
 from segval.services import queries
 from segval.services.segments import NotFound, SegmentService
@@ -131,6 +131,77 @@ class InsightsService:
                 "lift": (seg / base) if seg is not None and base else None,
             })
         return out
+
+    # ---- funnel -------------------------------------------------------------------
+    def funnel(self, definition: SegmentDefinition | None = None,
+               segment_id: str | None = None) -> dict[str, Any]:
+        """How each top-level condition narrows (AND) or widens (OR) the audience.
+
+        Every child is compiled on its own (with its own parameter namespace) and
+        evaluated once per anchor; the steps are cumulative combinations in rule order.
+        """
+        definition, cp = self._resolve(definition, segment_id)
+        rule = definition.rule
+        children = rule.children if isinstance(rule, Group) and not rule.negate else [rule]
+        op = rule.op if isinstance(rule, Group) and not rule.negate else "and"
+        anchor_label = cp.label
+        params: dict[str, Any] = {"as_of": cp.params["as_of"]}
+        cols = []
+        for i, child in enumerate(children):
+            sub = self.segments.compiler.compile(
+                SegmentDefinition(anchor=definition.anchor, rule=child),
+                as_of=cp.params["as_of"], param_prefix=f"c{i}_",
+            )
+            params.update({k: v for k, v in sub.params.items() if k != "as_of"})
+            cols.append(f"coalesce({sub.predicate}, false) AS c{i}")
+        joiner = " AND " if op == "and" else " OR "
+        sums = [f"count(CASE WHEN c{i} THEN 1 END) AS alone{i}" for i in range(len(children))]
+        sums += [
+            f"count(CASE WHEN {joiner.join(f'c{j}' for j in range(i + 1))} THEN 1 END) AS cum{i}"
+            for i in range(len(children))
+        ]
+        text = (
+            f"MATCH ({cp.var}:{q(anchor_label)})\n"
+            f"WITH {cp.var}, {', '.join(cols) if cols else 'true AS c0'}\n"
+            f"RETURN count(*) AS base, {', '.join(sums)}"
+        )
+        row = self.client.read(text, params)[0]
+        steps = [{"index": i, "alone": row[f"alone{i}"], "cumulative": row[f"cum{i}"]}
+                 for i in range(len(children))]
+        return {"anchor": cp.anchor, "op": op, "base": row["base"], "steps": steps,
+                "final": steps[-1]["cumulative"] if steps else row["base"]}
+
+    # ---- trend ----------------------------------------------------------------------
+    def trend(self, metric: str, definition: SegmentDefinition | None = None,
+              segment_id: str | None = None, months: int = 6) -> dict[str, Any]:
+        """Monthly value of a time-based metric per member, segment vs. base."""
+        _, cp = self._resolve(definition, segment_id)
+        m = self.catalog.metric(metric)
+        if m is None or not m.time_property:
+            raise ValueError(f"{metric!r} is not a time-based metric")
+        hops = self.catalog.path(cp.anchor, m.entity)
+        if not hops:
+            raise ValueError(f"metric {m.display!r} is not available for {cp.anchor}")
+        tp = f"u.{q(m.time_property)}"
+        value = "count(u)" if m.aggregate.value == "count" else f"sum(u.{q(m.property or '')})"
+        params = dict(cp.params)
+        params["months"] = months
+        month = f"date.truncate('month', {tp})"
+        text = (
+            f"MATCH ({cp.var}:{q(cp.label)})\n"
+            f"WITH {cp.var}, coalesce({cp.predicate}, false) AS in_segment\n"
+            f"MATCH {hop_pattern(cp.var, hops, 'u')}\n"
+            f"WHERE {tp} > date($as_of) - duration({{months: $months}})\n"
+            f"  AND {tp} <= date($as_of) + duration({{days: 31}})\n"
+            f"WITH {cp.var}, in_segment, {month} AS month, {value} AS v\n"
+            "WHERE month <= date($as_of)\n"
+            "RETURN toString(month) AS month, avg(CASE WHEN in_segment THEN v END) AS segment,\n"
+            "       avg(v) AS base, count(CASE WHEN in_segment THEN 1 END) AS segment_n, count(*) AS base_n\n"
+            "ORDER BY month"
+        )
+        rows = self.client.read(text, params)
+        return {"metric": m.id, "display": m.display, "unit": m.unit, "aggregate": m.aggregate.value,
+                "points": rows}
 
     # ---- overlap -------------------------------------------------------------------
     def overlap(self, segment_ids: list[str]) -> dict[str, Any]:

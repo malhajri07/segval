@@ -1,6 +1,6 @@
 import { ApiError } from "./errors";
 import type {
-  Catalog, Expansion, GraphEdge, GraphNode, MemberView, Overlap, Preview, Profile, Row, Segment,
+  Catalog, Expansion, Funnel, GraphEdge, GraphNode, Trend, MemberView, Overlap, Preview, Profile, Row, Segment,
   SegmentDefinition, SegmentInput, Template,
 } from "./types";
 
@@ -59,6 +59,10 @@ const httpApi = {
   profile: (body: { definition?: SegmentDefinition; segment_id?: string; dimensions?: string[] }, signal?: AbortSignal) =>
     request<Profile>("POST", "/api/insights/profile", body, signal),
   overlap: (segment_ids: string[]) => request<Overlap>("POST", "/api/insights/overlap", { segment_ids }),
+  funnel: (body: { definition?: SegmentDefinition; segment_id?: string }, signal?: AbortSignal) =>
+    request<Funnel>("POST", "/api/insights/funnel", body, signal),
+  trend: (body: { definition?: SegmentDefinition; segment_id?: string; metric: string; months?: number }, signal?: AbortSignal) =>
+    request<Trend>("POST", "/api/insights/trend", body, signal),
   member: (anchor: string, key: string) =>
     request<MemberView>("GET", `/api/members/${anchor}/${encodeURIComponent(key)}`),
   seed: (customers: number) =>
@@ -101,6 +105,8 @@ function demoApi(): Api {
     exportUrl: () => "",
     profile: (body) => run((s) => s.profile(body)),
     overlap: (ids) => run((s) => s.overlap(ids)),
+    funnel: (body) => run((s) => s.funnel(body)),
+    trend: (body) => run((s) => s.trend(body)),
     member: (anchor, key) => run((s) => s.member(anchor, key)),
     seed: () => run((s) => { s.reset(); return { segments: s.list().length }; }),
     graphStart: () => run((s) => ({ node: s.graphStart() })),

@@ -17,6 +17,7 @@ from segval.dsl.compiler import CompiledPredicate, CompileError, Compiler
 from segval.dsl.model import SegmentDefinition, referenced_segments
 from segval.graph.client import GraphClient
 from segval.services import queries
+from segval.services.holdout import in_control
 
 
 class NotFound(LookupError):
@@ -33,6 +34,8 @@ class SegmentIn(BaseModel):
     tags: list[str] = Field(default_factory=list)
     definition: SegmentDefinition
     owner: str | None = None
+    holdout_pct: float = Field(default=0, ge=0, le=50)
+    """Share of members held out as a control group when the segment is materialized."""
 
 
 class Segment(SegmentIn):
@@ -44,13 +47,18 @@ class Segment(SegmentIn):
     materialized_at: str | None = None
     materialized_version: int | None = None
     materialized_as_of: str | None = None
+    materialized_holdout_pct: float | None = None
+    target_count: int | None = None
+    control_count: int | None = None
     depends_on: list[str] = Field(default_factory=list)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def is_stale(self) -> bool:
-        """True when the definition changed since the last materialization."""
-        return self.materialized_version != self.version
+        """True when the rules or the holdout changed since the last materialization."""
+        return (self.materialized_version != self.version
+                or (self.member_count is not None
+                    and (self.materialized_holdout_pct or 0) != self.holdout_pct))
 
 
 class DataClock:
@@ -177,6 +185,7 @@ class SegmentService:
             "description": data.description,
             "tags": data.tags,
             "owner": data.owner,
+            "holdout_pct": data.holdout_pct,
             "definition_json": data.definition.model_dump_json(),
             "depends_on": sorted(referenced_segments(data.definition.rule)),
             "version": 1,
@@ -197,13 +206,13 @@ class SegmentService:
         rows = self.client.write(
             "MATCH (s:Segment {id: $id}) "
             "SET s.name = $name, s.description = $description, s.tags = $tags, "
-            "    s.owner = $owner, s.definition_json = $definition_json, "
+            "    s.owner = $owner, s.definition_json = $definition_json, s.holdout_pct = $holdout, "
             "    s.depends_on = $depends_on, s.updated_at = $now, "
             "    s.version = s.version + CASE WHEN $bump THEN 1 ELSE 0 END "
             "RETURN s{.*} AS s",
             {
                 "id": segment_id, "name": data.name, "description": data.description,
-                "tags": data.tags, "owner": data.owner,
+                "tags": data.tags, "owner": data.owner, "holdout": data.holdout_pct,
                 "definition_json": data.definition.model_dump_json(),
                 "depends_on": sorted(referenced_segments(data.definition.rule)),
                 "now": _now(), "bump": definition_changed,
@@ -258,18 +267,43 @@ class SegmentService:
         cp = self.compile(seg.definition)
         for mq in queries.materialize_queries(cp, segment_id):
             self.client.run_autocommit(mq.text, mq.params)
+        control = self._assign_groups(seg, cp.label)
         rows = self.client.write(
             "MATCH (s:Segment {id: $id}) "
-            "SET s.member_count = COUNT { (s)<-[:MEMBER_OF]-() }, "
+            "WITH s, COUNT { (s)<-[:MEMBER_OF]-() } AS n "
+            "SET s.member_count = n, s.control_count = $control, s.target_count = n - $control, "
             "    s.materialized_at = $now, s.materialized_version = s.version, "
-            "    s.materialized_as_of = $as_of "
+            "    s.materialized_as_of = $as_of, s.materialized_holdout_pct = $holdout "
             "RETURN s{.*} AS s",
-            {"id": segment_id, "now": _now(), "as_of": cp.params["as_of"]},
+            {"id": segment_id, "now": _now(), "as_of": cp.params["as_of"],
+             "control": control, "holdout": seg.holdout_pct},
         )
         return _to_segment(rows[0]["s"])
 
+    def _assign_groups(self, seg: Segment, label: str, batch: int = 10_000) -> int:
+        """Tag each MEMBER_OF edge with group 'target' or 'control'; returns the control size."""
+        key = self.catalog.anchor_entity(seg.definition.anchor).key
+        self.client.run_autocommit(
+            "MATCH (:Segment {id: $id})<-[r:MEMBER_OF]-() "
+            "CALL (r) { SET r.group = 'target' } IN TRANSACTIONS OF 10000 ROWS",
+            {"id": seg.id},
+        )
+        if seg.holdout_pct <= 0:
+            return 0
+        keys = [r["k"] for r in self.client.read(
+            f"MATCH (a:{queries.q(label)})-[:MEMBER_OF]->(:Segment {{id: $id}}) "
+            f"RETURN a.{queries.q(key)} AS k", {"id": seg.id})]
+        control = [k for k in keys if in_control(seg.id, str(k), seg.holdout_pct)]
+        for i in range(0, len(control), batch):
+            self.client.write(
+                f"UNWIND $keys AS k MATCH (a:{queries.q(label)} {{{queries.q(key)}: k}})"
+                "-[r:MEMBER_OF]->(:Segment {id: $id}) SET r.group = 'control'",
+                {"keys": control[i:i + batch], "id": seg.id},
+            )
+        return len(control)
+
     def members(self, segment_id: str, limit: int = 100, skip: int = 0,
-                fields: list[str] | None = None) -> dict[str, Any]:
+                fields: list[str] | None = None, group: str | None = None) -> dict[str, Any]:
         seg = self.get(segment_id)
         anchor = self.catalog.anchor(seg.definition.anchor)
         assert anchor is not None
@@ -281,16 +315,21 @@ class SegmentService:
         mq = queries.members_query(
             cp, self.catalog, fields, limit, skip,
             materialized_segment_id=segment_id if materialized else None,
+            group=group if materialized else None,
         )
+        with_groups = materialized and (seg.control_count or 0) > 0
         return {
-            "fields": fields,
-            "rows": [r["row"] for r in self.client.read(*_q(mq))],
+            "fields": [*fields, "group"] if with_groups else fields,
+            "rows": [{**r["row"], **({"group": r["group"]} if with_groups else {})}
+                     for r in self.client.read(*_q(mq))],
             "source": "materialized" if materialized else "live",
         }
 
     def export_csv(self, segment_id: str, fields: list[str] | None = None,
-                   max_rows: int = 1_000_000) -> str:
-        page = self.members(segment_id, limit=max_rows, fields=fields)
+                   max_rows: int = 1_000_000, group: str | None = "target") -> str:
+        """Activation export. By default only the target group: the control group must
+        not be contacted, or the campaign's lift cannot be measured."""
+        page = self.members(segment_id, limit=max_rows, fields=fields, group=group)
         buf = io.StringIO()
         writer = csv.DictWriter(buf, fieldnames=page["fields"], extrasaction="ignore")
         writer.writeheader()

@@ -4,12 +4,13 @@
  */
 import { ApiError } from "../api/errors";
 import type {
-  Catalog, Dimension, Expansion, GraphEdge, GraphNode, Kpi, MemberView, Overlap, Preview, Profile,
+  Catalog, Dimension, Expansion, Funnel, Trend, GraphEdge, GraphNode, Kpi, MemberView, Overlap, Preview, Profile,
   Row, Segment, SegmentDefinition, SegmentInput, Template,
 } from "../api/types";
 
-import { CompileError, Compiler, Graph, edges, traverse, type GNode, type Snapshot } from "./engine";
+import { CompileError, Compiler, Graph, edges, minusMonths, plusDays, traverse, type GNode, type Snapshot } from "./engine";
 import raw from "./data.json";
+import { inControl } from "./holdout";
 
 const STORE_KEY = "segval-demo-v1";
 const SEED_TEMPLATES = ["five_g_upsell", "churn_contagion", "social_influencers", "high_value_at_risk"];
@@ -191,7 +192,8 @@ export class DemoService {
   private get(id: string): Segment {
     const s = this.segs.get(id);
     if (!s) throw new ApiError(404, `not found: ${id}`);
-    return { ...s, is_stale: s.materialized_version !== s.version };
+    const holdoutChanged = s.member_count !== null && (s.materialized_holdout_pct ?? 0) !== (s.holdout_pct ?? 0);
+    return { ...s, holdout_pct: s.holdout_pct ?? 0, is_stale: s.materialized_version !== s.version || holdoutChanged };
   }
 
   // ---- API surface ---------------------------------------------------------------------------
@@ -243,6 +245,7 @@ export class DemoService {
       name: body.name, description: body.description, tags: body.tags, owner: null,
       definition: body.definition, version: 1, created_at: ts, updated_at: ts,
       member_count: null, materialized_at: null, materialized_version: null, materialized_as_of: null,
+      materialized_holdout_pct: null, holdout_pct: body.holdout_pct ?? 0, target_count: null, control_count: null,
       depends_on: deps, is_stale: true,
     };
     this.segs.set(s.id, s);
@@ -257,7 +260,7 @@ export class DemoService {
     const changed = JSON.stringify(cur.definition) !== JSON.stringify(body.definition);
     this.segs.set(id, {
       ...cur, name: body.name, description: body.description, tags: body.tags,
-      definition: body.definition, depends_on: deps, updated_at: now(),
+      definition: body.definition, depends_on: deps, updated_at: now(), holdout_pct: body.holdout_pct ?? 0,
       version: cur.version + (changed ? 1 : 0),
     });
     this.save();
@@ -283,9 +286,11 @@ export class DemoService {
     }
     const { inSeg } = this.matching(seg.definition);
     this.members.set(id, inSeg);
+    const control = [...inSeg].filter((n) => inControl(id, n.key, seg.holdout_pct)).length;
     this.segs.set(id, {
       ...this.segs.get(id)!, member_count: inSeg.size, materialized_at: now(),
       materialized_version: seg.version, materialized_as_of: this.asOf,
+      materialized_holdout_pct: seg.holdout_pct, control_count: control, target_count: inSeg.size - control,
     });
     this.save();
     return this.get(id);
@@ -296,9 +301,16 @@ export class DemoService {
     const anchor = this.catalog.anchors.find((a) => a.id === seg.definition.anchor)!;
     const materialized = seg.member_count !== null && this.members.has(id);
     const nodes = materialized ? [...this.members.get(id)!] : [...this.matching(seg.definition).inSeg];
+    const withGroups = materialized && (seg.control_count ?? 0) > 0;
+    const page = this.sortByKey(nodes).slice(skip, skip + limit);
+    const rows = this.rows(page, seg.definition.anchor, anchor.sample_fields);
+    if (withGroups) {
+      const pct = seg.materialized_holdout_pct ?? 0;
+      page.forEach((n, i) => { rows[i].group = inControl(id, n.key, pct) ? "control" : "target"; });
+    }
     return {
-      fields: anchor.sample_fields,
-      rows: this.rows(this.sortByKey(nodes).slice(skip, skip + limit), seg.definition.anchor, anchor.sample_fields),
+      fields: withGroups ? [...anchor.sample_fields, "group"] : anchor.sample_fields,
+      rows,
       source: materialized ? "materialized" : "live",
     };
   }
@@ -380,6 +392,74 @@ export class DemoService {
       const b = avg(base);
       return { id: k.id, display: k.display, unit: k.unit, segment: seg, base: b, lift: seg !== null && b ? seg / b : null };
     });
+  }
+
+  funnel(body: { definition?: SegmentDefinition; segment_id?: string }): Funnel {
+    const def = body.segment_id ? this.get(body.segment_id).definition : body.definition;
+    if (!def) throw new ApiError(400, "provide a definition or a segment_id");
+    this.checkReferences(def);
+    const cp = this.compile(def);
+    const rule = def.rule;
+    const grouped = rule.kind === "group" && !rule.negate;
+    const children = grouped ? rule.children : [rule];
+    const op = grouped ? rule.op : "and";
+    const tests = children.map((child, i) => {
+      try { return this.compiler.compile({ anchor: def.anchor, rule: child }, `c${i}_`).test; }
+      catch (e) { if (e instanceof CompileError) throw new ApiError(422, e.detail, e.path); throw e; }
+    });
+    const base = this.graph.nodes(cp.label);
+    const alone = tests.map(() => 0);
+    const cum = tests.map(() => 0);
+    for (const n of base) {
+      let acc = op === "and";
+      tests.forEach((t, i) => {
+        const v = t(n);
+        if (v) alone[i] += 1;
+        acc = op === "and" ? acc && v : acc || v;
+        if (acc) cum[i] += 1;
+      });
+    }
+    const steps = tests.map((_, i) => ({ index: i, alone: alone[i], cumulative: cum[i] }));
+    return { anchor: cp.anchor, op, base: base.length, steps, final: steps.length ? cum[cum.length - 1] : base.length };
+  }
+
+  trend(body: { definition?: SegmentDefinition; segment_id?: string; metric: string; months?: number }): Trend {
+    const def = body.segment_id ? this.get(body.segment_id).definition : body.definition;
+    if (!def) throw new ApiError(400, "provide a definition or a segment_id");
+    this.checkReferences(def);
+    const { cp, base, inSeg } = this.matching(def);
+    const m = this.catalog.metrics.find((x) => x.id === body.metric);
+    if (!m || !m.time_property) throw new ApiError(400, `'${body.metric}' is not a time-based metric`);
+    const hops = this.catalog.entities.find((e) => e.id === m.entity)?.paths[cp.anchor];
+    if (!hops || !hops.length) throw new ApiError(400, `metric '${m.display}' is not available for ${cp.anchor}`);
+    const months = body.months ?? 6;
+    const lo = minusMonths(this.asOf, months);
+    const hi = plusDays(this.asOf, 31);
+    const tp = m.time_property;
+    const acc = new Map<string, { seg: number[]; base: number[] }>();
+    for (const n of base) {
+      const per = new Map<string, number>();
+      for (const u of traverse(n, hops)) {
+        const t = u.props[tp] as string | undefined;
+        if (t == null || !(t > lo && t <= hi)) continue;
+        const month = `${t.slice(0, 7)}-01`;
+        if (month > this.asOf) continue;
+        const add = m.aggregate === "count" ? 1 : ((u.props[m.property ?? ""] as number | undefined) ?? 0);
+        per.set(month, (per.get(month) ?? 0) + add);
+      }
+      for (const [month, v] of per) {
+        const a = acc.get(month) ?? { seg: [], base: [] };
+        a.base.push(v);
+        if (inSeg.has(n)) a.seg.push(v);
+        acc.set(month, a);
+      }
+    }
+    const avg = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
+    const points = [...acc.keys()].sort().map((month) => {
+      const a = acc.get(month)!;
+      return { month, segment: avg(a.seg), base: avg(a.base), segment_n: a.seg.length, base_n: a.base.length };
+    });
+    return { metric: m.id, display: m.display, unit: m.unit, aggregate: m.aggregate, points };
   }
 
   overlap(ids: string[]): Overlap {

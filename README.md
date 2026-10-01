@@ -10,8 +10,17 @@ materializes it for activation.
   who churned") and segment-of-segments, with AND / OR / NOT nesting.
 * **Live preview**: segment size, share of base, sample, plain-language summary and
   the generated Cypher.
-* **Insights**: KPI lift, segment-vs-base distribution with index per dimension,
-  overlap matrix, 360° member view.
+* **Insights**:
+  * a condition funnel showing how each rule narrows the audience;
+  * "what makes this segment different", ranked over- and under-represented traits that leave out the rule's own fields;
+  * monthly segment-vs-base trends;
+  * KPI lift, distributions with an index, overlap matrix and a 360° member view.
+* **Graph intelligence**: graph algorithms computed from the call graph and account links, all usable as ordinary segment attributes:
+  * call-graph influence (PageRank percentile);
+  * calling communities (recursive Louvain), with community size and community churn rate;
+  * household size.
+* **Control groups**: hold out a share of each segment (deterministic, stable across
+  refreshes). Exports contain only the contact group, so campaign lift can be measured.
 * **Graph workspace**: explore customers, lines, plans, devices and call contacts as a
   graph; drag one customer onto another to link the accounts (Household, Family,
   Corporate, Same person), or shift-click several and link them as a group. Links are
@@ -22,7 +31,10 @@ materializes it for activation.
 * **11 templates** for mobile B2C: retention, churn contagion, influencers, 5G upsell,
   prepaid→postpaid, roaming/international cross-sell, device upgrade, care detractors…
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and the roadmap.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and the roadmap, and
+[docs/RESEARCH.md](docs/RESEARCH.md) for the research behind the latest features.
+To start and smoke-test the stack in a container, use the project skill at
+`.claude/skills/run-segval/` (`up.sh`, then `drive.mjs`).
 
 ## Quick start (Docker)
 

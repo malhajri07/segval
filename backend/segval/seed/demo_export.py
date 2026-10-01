@@ -15,6 +15,7 @@ from typing import Any
 
 from segval.api.app import catalog_payload
 from segval.catalog.loader import load_catalog
+from segval.graph.features import compute_features
 from segval.seed.generator import ADDONS, CITIES, DEVICES, PLANS, Dataset, generate
 from segval.templates.loader import load_templates
 
@@ -24,6 +25,14 @@ def _table(props: list[str], rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def snapshot(ds: Dataset) -> dict[str, Any]:
+    feats = compute_features(
+        [(s["msisdn"], s["status"]) for s in ds.subscriptions],
+        [(c["src"], c["dst"], c["calls"]) for c in ds.calls],
+        [c["customer_id"] for c in ds.customers],
+        [(lk["a"], lk["b"], lk["link_type"]) for lk in ds.links],
+    )
+    subs = [{**s, **feats.subscriptions[s["msisdn"]]} for s in ds.subscriptions]
+    custs = [{**c, **feats.customers[c["customer_id"]]} for c in ds.customers]
     nodes = {
         "City": _table(["name", "region"], [{"name": c[0], "region": c[1]} for c in CITIES]),
         "Plan": _table(
@@ -42,13 +51,15 @@ def snapshot(ds: Dataset) -> dict[str, Any]:
         ),
         "Customer": _table(
             ["customer_id", "full_name", "gender", "age", "nationality_group", "credit_class",
-             "tenure_months", "digital_app_user", "preferred_language", "value_tier"],
-            ds.customers,
+             "tenure_months", "digital_app_user", "preferred_language", "value_tier",
+             "household_size"],
+            custs,
         ),
         "Subscription": _table(
             ["msisdn", "payment_type", "status", "activation_date", "tenure_months", "arpu_3m",
-             "churn_score", "nps", "last_recharge_date"],
-            ds.subscriptions,
+             "churn_score", "nps", "last_recharge_date", "influence_score", "community_id",
+             "community_size", "community_churn_rate"],
+            subs,
         ),
         "MonthlyUsage": _table(
             ["usage_id", "month", "data_mb", "voice_min", "sms_count", "roaming_mb", "intl_min",

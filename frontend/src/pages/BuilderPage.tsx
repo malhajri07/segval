@@ -22,6 +22,7 @@ export function BuilderPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState("");
+  const [holdout, setHoldout] = useState(0);
   const [tab, setTab] = useState<Tab>("preview");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export function BuilderPage() {
         setName(s.name);
         setDescription(s.description);
         setTags(s.tags.join(", "));
+        setHoldout(s.holdout_pct ?? 0);
       });
     } else if (templateId) {
       api.templates().then((ts) => {
@@ -74,6 +76,7 @@ export function BuilderPage() {
     const body = {
       name: name.trim(), description,
       tags: tags.split(",").map((t) => t.trim()).filter(Boolean), definition,
+      holdout_pct: holdout,
     };
     try {
       const seg = id ? await api.updateSegment(id, body) : await api.createSegment(body);
@@ -107,6 +110,14 @@ export function BuilderPage() {
           <label className="grow">
             <span className="muted small">Description</span>
             <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is this segment for?" />
+          </label>
+          <label title="Members held out of the campaign so its lift can be measured">
+            <span className="muted small">Control group</span>
+            <span className="holdout-input">
+              <input id="holdout" type="number" className="num" min={0} max={50} step={1} value={holdout}
+                onChange={(e) => setHoldout(Math.max(0, Math.min(50, Number(e.target.value) || 0)))} />
+              <span className="muted">%</span>
+            </span>
           </label>
           <label>
             <span className="muted small">Tags</span>
@@ -162,7 +173,7 @@ export function BuilderPage() {
             onOpen={(r) => setMember(String(r[keyField]))} />
         )}
         {tab === "insights" && (
-          profile.data ? <ProfileView profile={profile.data} />
+          profile.data ? <ProfileView profile={profile.data} definition={definition} segmentNames={segmentNames} />
             : profile.error ? <p className="error">{profile.error.message}</p>
             : <p className="muted">Profiling segment against the base…</p>
         )}
@@ -188,6 +199,7 @@ export function SampleTable({ fields, rows, onOpen, compact }: {
 }) {
   const catalog = useCatalog();
   const header = (f: string) => {
+    if (f === "group") return "Group";
     const [e, a] = f.split(".");
     return catalog.entities.find((x) => x.id === e)?.attributes.find((x) => x.id === a)?.display ?? f;
   };

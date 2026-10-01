@@ -122,6 +122,10 @@ export interface Segment {
   materialized_at: string | null;
   materialized_version: number | null;
   materialized_as_of: string | null;
+  materialized_holdout_pct: number | null;
+  holdout_pct: number;
+  target_count: number | null;
+  control_count: number | null;
   depends_on: string[];
   is_stale: boolean;
 }
@@ -189,6 +193,7 @@ export interface SegmentInput {
   description: string;
   tags: string[];
   definition: SegmentDefinition;
+  holdout_pct?: number;
 }
 
 // ---- graph workspace -----------------------------------------------------------
@@ -216,3 +221,9 @@ export interface Expansion {
   edges: GraphEdge[];
   truncated: boolean;
 }
+
+export interface FunnelStep { index: number; alone: number; cumulative: number }
+export interface Funnel { anchor: string; op: "and" | "or"; base: number; steps: FunnelStep[]; final: number }
+
+export interface TrendPoint { month: string; segment: number | null; base: number | null; segment_n: number; base_n: number }
+export interface Trend { metric: string; display: string; unit: string | null; aggregate: string; points: TrendPoint[] }
